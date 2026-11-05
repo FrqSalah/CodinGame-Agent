@@ -1,0 +1,33 @@
+services:
+  codingame-farm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codingame-farm
+    restart: unless-stopped
+    ports:
+      # Dashboard Aspire accessible publiquement ou via tunnel VPN
+      - "${DASHBOARD_PORT:-15031}:15031"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DOTNET_ENVIRONMENT=Production
+      - ASPIRE_ALLOW_UNSECURED_TRANSPORT=true
+      # Clés d'API pour les agents LLM
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      # Persistance de la base SQLite et des données de pipelines
+      - codingame-data:/app/data
+      # Socket Docker pour l'isolation des processus si nécessaire
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          # Isolation cgroups sur le VPS
+          cpus: '${MAX_CPUS:-14.0}'
+          memory: ${MAX_MEMORY:-16G}
+
+volumes:
+  codingame-data:
+    driver: local
