@@ -7,3 +7,34 @@
 **/.idea
 *.log
 .Agent
+
+# =====================================================================
+# Secrets (ajoute 2026-11-05)
+# Miroir du bloc secrets de .gitignore : les deux listes doivent rester
+# alignees. .gitignore protege l'historique, .dockerignore protege les
+# couches d'image -- et une couche n'oublie pas : un fichier ajoute puis
+# supprime plus loin reste lisible dans l'image.
+# Ce n'est pas theorique : .github/workflows/deploy.yml fait
+# `cp env.template .env` DANS le repertoire de build, puis construit au
+# meme endroit. Sans ces motifs, `COPY . .` embarque ce .env.
+# Voir .Agent/CODINGAME_API.md section 2.1.
+# =====================================================================
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+**/token
+*.token
+secrets.json
+secret.json
+*.pem
+*.pfx
+*.p12
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+.npmrc
+.config/codingame/
