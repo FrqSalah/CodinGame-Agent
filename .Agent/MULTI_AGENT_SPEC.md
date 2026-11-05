@@ -5,21 +5,27 @@
 
 ## 1. Vue d'Ensemble des Rôles
 
-Le système se compose de 5 agents aux responsabilités strictement délimitées pour éviter la dispersion de contexte et maximiser le ratio valeur/coût de tokens.
+> **Révisé le 2026-11-05.** Les rôles LLM sont désormais portés par des **CLI externes**
+> (Claude Code, Antigravity CLI) enveloppés en sous-classes d'`AIAgent` — voir
+> [AGENT_BACKENDS.md](AGENT_BACKENDS.md). Ce changement a rendu visible que **deux de ces
+> cinq rôles n'étaient pas des agents** : le Reviewer et l'Admin sont des nœuds
+> déterministes (`Executor`) du même graphe. Trois agents, deux exécuteurs.
+
+Le système se compose de 5 rôles aux responsabilités strictement délimitées pour éviter la dispersion de contexte et maximiser le ratio valeur/coût de tokens.
 
 ```
        ┌────────────────────────┐
-       │      ADMIN AGENT       │
+       │    ADMIN (Executor)    │
        └───────────┬────────────┘
                    │ Initialise & alloue les ressources
                    ▼
        ┌────────────────────────┐
-       │    RESEARCHER AGENT    │◀──────────────┐
+       │   RESEARCHER (agent)   │◀──────────────┐
        └───────────┬────────────┘               │
                    │ Stratégie macro            │ Plancher de mesure
                    ▼                            │ atteint (3 cycles)
        ┌────────────────────────┐               │
-       │   WORKER / CODER AGENT │               │
+       │ WORKER / CODER (agent) │               │
        └───────────┬────────────┘               │
                    │ Code & compile             │
                    ▼                            │
@@ -27,7 +33,7 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
                    │ Verdict du tournoi         │
                    ▼                            │
        ┌────────────────────────┐               │
-       │     REVIEWER AGENT     │───────────────┘
+       │  REVIEWER (Executor)   │───────────────┘
        └───────────┬────────────┘
                    │
          ┌─────────┴─────────┐
@@ -40,7 +46,7 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
 
 ## 2. Fiche Détaillée par Agent
 
-### 1. Admin Agent
+### 1. Admin — nœud déterministe (`Executor`)
 * **Mission** : interface entre l'humain et la ferme. Provisionne de nouveaux pipelines de jeu et gère la santé globale.
 * **Déclenchement** : commande CLI utilisateur, ou alerte d'infrastructure sur un pipeline **bloqué** — au sens unique défini en [PARAMETERS.md §5](PARAMETERS.md) : aucun heartbeat de progrès depuis le délai imparti.
 * **Entrées** : nom du jeu CodinGame, règles du jeu, timeouts du jeu, composition initiale du pool d'ancrage.
@@ -66,10 +72,18 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
 * **Contrainte de format** : la soumission CodinGame est une **chaîne de code unique**, donc un **fichier unique**. Pas de projet multi-fichiers, quelle que soit la taille du bot. Le langage disponible dépend du jeu et se lit depuis l'API. Voir [CODINGAME_API.md §7](CODINGAME_API.md).
 * **Priorité de conception** : un bot qui dépasse le temps imparti, plante ou produit une action invalide est **éliminé** et perd la partie, quel que soit son score antérieur. Tenir le temps compte donc plus que jouer mieux.
 * **Validation impérative** : le code généré doit compiler en local avant d'être envoyé en tournoi. Au-delà du nombre de tentatives de compilation de [PARAMETERS.md §5](PARAMETERS.md), le Worker n'insiste pas : il escalade vers le Researcher avec les erreurs rencontrées.
+* **Périmètre d'écriture — la frontière est le système de fichiers.** Le Worker tourne
+  dans un répertoire de travail qui ne contient **que** le fichier du bot. Les drapeaux de
+  permission des CLI sont une seconde couche utile, pas la frontière : l'un d'eux n'est
+  que partiellement honoré en mode headless, et deux autres aux noms voisins ont des
+  effets opposés. Voir [AGENT_BACKENDS.md §5](AGENT_BACKENDS.md).
+* **Les tentatives de compilation ne sont plus comptables de l'extérieur** : l'agent lance
+  `dotnet build` dans sa propre boucle. Le garde-fou qui tient est le plafond de **tours**,
+  pas un compteur tenu par l'orchestrateur.
 
 ---
 
-### 4. Reviewer Agent
+### 4. Reviewer — nœud déterministe (`Executor`)
 * **Mission** : gestionnaire tactique, à la cadence de cycle définie en [PARAMETERS.md §4](PARAMETERS.md). Analyse les données chiffrées de l'arène locale et tranche.
 * **Entrées** (toutes lues dans l'`ExperimentStore`, jamais recalculées par l'agent) :
   * Verdict SPRT : `H0` acceptée, `H1` acceptée, ou non concluant.
@@ -86,6 +100,12 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
 > significatif, il lit le verdict produit par la couche déterministe. Son raisonnement
 > porte sur *quoi faire* du verdict et sur le motif de l'échec, pas sur les chiffres.
 
+> **Et c'est pourquoi ce n'est pas un agent.** Lire un verdict SPRT et choisir entre trois
+> issues est une **table de décision**, pas du raisonnement. Lui payer un run de CLI
+> agentique coûterait de l'argent et ajouterait du non-déterminisme sans rien apporter.
+> Il devient un `Executor` du graphe. Si l'on veut une **narration** du motif d'échec pour
+> le journal, c'est un appel de modèle court et séparé, jamais la décision elle-même.
+
 ---
 
 ### 5. Researcher Agent
@@ -99,6 +119,10 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
   * Décision de changement de paradigme algorithmique (par exemple : *« l'heuristique actuelle atteint ses limites face aux stratégies agressives : basculer sur un moteur Minimax 4 plis avec table de transposition »*).
   * *Demande* d'enrichissement du pool d'entraînement auprès de l'`OpponentPoolManager`.
   * Décision de restart complet du problème, en conservant les leçons apprises.
+
+> **C'est le bon endroit pour le second backend.** Deux CLI adossés à des modèles
+> différents, interrogés sur le même plateau, produisent une véritable diversité de
+> raisonnement — là où la dédoubler sur le Worker ne ferait que doubler la facture.
 
 > **Pourquoi c'est le Researcher qui est appelé sur un plateau** : un SPRT non concluant
 > signifie que l'effet recherché est sous le plancher de mesure (voir

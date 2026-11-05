@@ -39,16 +39,17 @@ de microservices cloud-native **.NET Aspire** et le framework d'agents
 ┌───────────────────────────────────┴────────────────────────────────────┐
 │                COEUR MULTI-AGENTS (MICROSOFT AGENT FRAMEWORK)          │
 │                                                                        │
-│   [ADMIN] ──▶ Provisionne les jeux et configure les pipelines          │
-│   [RESEARCHER] ──▶ Détecte les plateaux & propose les pivots d'archi   │
-│   [UTILS-WRITER] ──▶ Écrit les simulateurs & parseurs de données       │
-│   [WORKER/CODER] ──▶ Modifie le code source du bot                     │
-│   [REVIEWER] ──▶ Analyse les tournois et acte PROMOTE / ROLLBACK       │
+│   AGENTS LLM — sous-classes d'AIAgent sur backends CLI :               │
+│   [WORKER/CODER]  ──▶ Modifie le fichier unique du bot                 │
+│   [UTILS-WRITER]  ──▶ Écrit parseurs et extracteurs de métriques       │
+│   [RESEARCHER]    ──▶ Détecte les plateaux, propose les pivots         │
 │                                                                        │
-│   Outils exposés comme AIFunction (tools) :                            │
-│   - GitTools (branches, commits, promotion, abandon)                   │
-│   - TournamentTools (soumission d'une évaluation à l'arène)            │
-│   - MetricsTools (lecture de l'ExperimentStore)                        │
+│   NŒUDS DÉTERMINISTES — Executor, sans LLM :                           │
+│   [REVIEWER]      ──▶ Lit le verdict SPRT, acte PROMOTE / ROLLBACK     │
+│   [ADMIN]         ──▶ Provisionne les jeux, configure les pipelines    │
+│                                                                        │
+│   Middleware de run : BudgetGuard (comptage, plafonds)                 │
+│   Outils AIFunction : GitTools, TournamentTools, MetricsTools          │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Contrôle de processus
                                     ▼
@@ -78,30 +79,55 @@ de microservices cloud-native **.NET Aspire** et le framework d'agents
 
 ### B. Moteur d'Agents (`CodinGame.Agents`)
 
-> **Décision d'architecture — 2026-11-05 : Microsoft Agent Framework**
+> **Décision d'architecture — révisée le 2026-11-05 : Agent Framework, conservé**
 >
-> Les documents précédents écrivaient « Semantic Kernel / Microsoft Agent Framework »,
+> Les documents précédents écrivaient « Semantic Kernel / Microsoft Agent Framework »
 > comme s'il s'agissait d'un seul produit. Ce sont deux bibliothèques distinctes, et le
-> choix est désormais tranché : **Microsoft Agent Framework** (`Microsoft.Agents.AI`).
+> choix est tranché : **Microsoft Agent Framework** (`Microsoft.Agents.AI`).
 >
-> **Pourquoi** :
-> * Agent Framework est le **successeur déclaré** de Semantic Kernel et d'AutoGen, écrit par les mêmes équipes.
-> * Il apporte des **workflows en graphe** donnant un contrôle explicite des chemins d'exécution multi-agents — exactement ce dont la boucle Worker → Arène → Reviewer a besoin.
-> * Sa gestion d'état pour les scénarios longs avec intervention humaine correspond aux cycles de 24-48 h du projet.
-> * Il est bâti sur `Microsoft.Extensions.AI`, déjà référencé par la solution.
+> **La décision a été réexaminée** quand le projet est passé à des agents fournis par des
+> CLI externes (Claude Code, Antigravity CLI). Aucun des deux n'a de SDK .NET, donc
+> l'intégration passe par **sous-processus** — ce qui semblait retirer au framework sa
+> raison d'être. **Ce n'était pas le cas** : `AIAgent` est conçu pour être sous-classé, y
+> compris sans modèle de chat. Un agent sous-processus est donc un citoyen de première
+> classe du framework, pas un contournement.
 >
-> **Risque accepté** : Agent Framework est en *public preview*. Pour un système destiné à
-> tourner sans surveillance plusieurs jours, c'est un risque réel, assumé ici parce que
-> l'alternative mène à une API archivée (voir ci-dessous).
+> **Ce que le framework apporte, et qu'il faudrait sinon réécrire moins bien** :
 >
-> **Repli** : si l'instabilité du preview bloque, se rabattre sur l'orchestration
-> Semantic Kernel `GroupChatOrchestration`, elle-même marquée expérimentale.
+> * **Middleware de run** : un point d'interception unique pour tous les runs,
+>   sous-processus compris. C'est là que vit le `BudgetGuard`.
+> * **OpenTelemetry** selon les conventions sémantiques GenAI, avec le dashboard Aspire
+>   comme cible documentée : les agents entrent dans le même arbre de traces que l'arène,
+>   ce que des `Process.Start` nus ne donneraient jamais.
+> * **Graphe à nœuds mixtes** : un `Executor` est du code, donc le Reviewer déterministe
+>   est un nœud du **même** graphe que les agents LLM.
+> * **Human-in-the-loop** (`RequestPort`) : les portes de consentement du projet —
+>   inscription à un contest, garde-fou avant soumission.
+>
+> Détail complet, pièges des deux CLI et répartition des rôles :
+> [AGENT_BACKENDS.md](AGENT_BACKENDS.md).
+>
+> **Statut de stabilité — à ne pas surinterpréter.** Les versions antérieures de ce
+> document donnaient Agent Framework en *public preview* comme « risque accepté ».
+> **La documentation ne l'affirme pas.** Ce qui est vérifiable : des versions 1.x publiées
+> activement, aucune étiquette de stabilité déclarée pour .NET, et une documentation
+> incohérente sur la nécessité de `--prerelease`. Le risque réel est une **API encore
+> mouvante**, ce qui n'est pas la même chose qu'un preview déclaré.
+>
+> **Repli** : aucun qui soit meilleur. Semantic Kernel mène à une API archivée, et une
+> orchestration maison perdrait les quatre apports ci-dessus. Si le framework devient
+> bloquant, le point de rupture le moins coûteux est le **graphe** : les `AIAgent`
+> personnalisés et leur middleware survivraient à son remplacement.
 
-* **Technologie** : `Microsoft.Agents.AI` et `Microsoft.Extensions.AI`.
+* **Technologie** : `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Abstractions` et
+  `Microsoft.Extensions.AI`.
 * **Patterns utilisés** :
-  * `ChatClientAgent` (dérivé de `AIAgent`) pour chaque rôle spécialisé.
+  * **Sous-classes d'`AIAgent`** pour les backends CLI — `RunCoreAsync`,
+    `RunCoreStreamingAsync`, `CreateSessionCoreAsync`, `DeserializeSessionCoreAsync`.
+  * `ChatClientAgent` si un rôle doit un jour parler directement à un modèle.
+  * `Executor` pour les nœuds déterministes du graphe (Reviewer, Admin).
   * `AIFunctionFactory` pour exposer les outils déterministes (Git, Arène, Métriques).
-  * Workflow en graphe pour la collaboration structurée et les conditions de clôture de cycle.
+  * **Middleware de run** pour le `BudgetGuard`.
 
 #### API abandonnées
 

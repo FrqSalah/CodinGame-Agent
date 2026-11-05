@@ -73,16 +73,41 @@ Référence : une seule machine **16 cœurs**.
 
 | Paramètre | Valeur | Rôle |
 | :--- | :--- | :--- |
-| Cœurs réservés à l'hôte | 2 | Orchestrateur, dashboard, appels LLM, Git |
-| Cœurs dédiés à l'arène | 14 | Jamais utilisés par autre chose pendant un match |
+| Cœurs réservés à l'hôte | 2 | Orchestrateur, dashboard, Git, appels réseau |
+| Cœurs réservés aux agents CLI | 2 | Processus Claude Code / `agy`. **À calibrer en Phase 3** |
+| Cœurs dédiés à l'arène | 12 | Jamais utilisés par autre chose pendant un match |
 | Cœurs par créneau de match | 2 | Un par processus bot ; le referee partage le créneau |
-| Créneaux de match simultanés | 7 | 14 / 2 |
+| Créneaux de match simultanés | 6 | 12 / 2 |
 | Tournois simultanés (défaut) | 4 | Évite qu'un seul tournoi monopolise les créneaux |
 
 Ces valeurs sont une **contrainte d'exactitude, pas de performance** : l'incident 2 de
 [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) a montré que la contention CPU ne ralentit
 pas les mesures, elle les invalide. Un match qui ne peut pas obtenir son créneau attend ;
 il ne démarre jamais en mode dégradé.
+
+### Pourquoi ce découpage a changé le 2026-11-05
+
+Le découpage précédent donnait 2 cœurs à l'hôte, « appels LLM » compris, et 14 à
+l'arène. Il était dimensionné pour des **appels réseau**, qui ne consomment presque pas
+de CPU. Les agents sont désormais des **CLI externes** : des processus locaux qui lisent
+des fichiers, grepent et lancent `dotnet build`. Voir
+[AGENT_BACKENDS.md §7](AGENT_BACKENDS.md).
+
+Un agent qui s'exécute sur un cœur d'arène pendant un match ramène l'incident 2 : les
+mesures ne ralentissent pas, elles deviennent **fausses**.
+
+Deux façons de tenir l'invariant, et il faut en choisir une :
+
+1. **Partition dédiée** (valeurs du tableau) : les processus d'agents sont épinglés aux
+   cœurs réservés, jamais sur ceux de l'arène. Coût : un créneau de match perdu.
+2. **Emprunt de créneau** : un run d'agent demande un créneau à l'`ArenaScheduler` comme
+   le ferait un match. Coût : un agent long bloque des créneaux ; avantage : aucune
+   partition à maintenir cohérente avec les `cpuset` Docker.
+
+La première est recommandée : elle découple le débit de l'arène de la durée
+imprévisible d'un run d'agent. Le nombre exact de cœurs d'agents dépend du nombre de
+pipelines autorisés à raisonner en même temps : à **mesurer** en Phase 3, pas à deviner
+ici.
 
 ---
 
@@ -111,6 +136,8 @@ Sans ces plafonds, un cycle peut consommer un budget illimité sans produire de 
 | :--- | :--- | :--- |
 | Itérations max par cycle | 10 | Clôture forcée du cycle en `ROLLBACK` |
 | Tentatives de compilation max (Worker) | 5 | Escalade vers le Researcher |
+| Tours max par run d'agent | 30 | Fin du run ; le cycle continue avec ce qui a été produit |
+| Durée max d'un run d'agent | 20 min | Kill du processus **par l'orchestrateur** |
 | Tokens max par cycle | 1 % du budget mensuel | Clôture du cycle, pipeline mis en pause |
 | Heartbeat sans progrès | 2 h | Pipeline déclaré *bloqué*, alerte à l'Admin |
 | Durée max d'un tournoi | 4 h | Abandon de l'évaluation, créneaux libérés |
@@ -118,6 +145,23 @@ Sans ces plafonds, un cycle peut consommer un budget illimité sans produire de 
 Un pipeline est **bloqué** si, et seulement si, il n'a émis aucun heartbeat de progrès
 depuis le délai ci-dessus. C'est la définition unique à laquelle renvoie le déclencheur
 de l'Admin Agent.
+
+### Ce que les agents CLI ont changé à ces plafonds
+
+Deux de ces lignes ne s'appliquent plus comme avant, parce qu'un agent CLI porte sa propre
+boucle d'outils. Voir [AGENT_BACKENDS.md §4 et §6](AGENT_BACKENDS.md).
+
+* **Les tentatives de compilation ne sont plus comptables par l'orchestrateur.** L'agent
+  lance `dotnet build` lui-même, à l'intérieur de son run. Le plafond ci-dessus devient
+  une **consigne de prompt**, et le garde-fou qui tient réellement est le plafond de tours.
+* **Le plafond de tokens par cycle n'est plus un garde-fou préventif.** La consommation
+  d'un run agentique varie d'un ordre de grandeur et n'est pas prévisible avant le run. Il
+  reste une **limite de comptabilité** appliquée après coup. Ce qui borne un run avant
+  qu'il parte, ce sont les tours, le wall-clock et le plafond de dépense de §6.
+
+> **La durée max d'un run est appliquée par l'orchestrateur, jamais par le CLI.** Le
+> `--print-timeout` d'Antigravity vaut `0s` par défaut, soit aucune limite : un CLI n'est
+> jamais l'autorité sur sa propre durée.
 
 ---
 
@@ -129,8 +173,17 @@ de l'Admin Agent.
 | Plafond par cycle | 1 % du budget mensuel |
 | Seuil d'alerte | 80 % du budget consommé |
 | À 100 % du budget | Pause des pipelines, du moins performant au plus performant ; aucun nouveau cycle |
+| Plafond par run d'agent | à définir | Passé à `--max-budget-usd` (Claude Code uniquement) |
+| Tarif des tokens Antigravity | à renseigner | Antigravity ne rend **aucun coût** : ses tokens doivent être tarifés ici |
 
 Le comptage est assuré par le `BudgetGuard` de la couche déterministe, pas par les agents.
+Depuis le passage aux agents CLI, il s'applique dans le **middleware de run** d'Agent
+Framework : un point d'interception unique pour tous les runs, sous-processus compris.
+
+> **Un plafond n'est pas une garantie de facture.** Les plafonds de dépense des CLI sont
+> des *estimations côté client* et la dépense réelle peut les dépasser. Claude Code rend
+> `total_cost_usd` ; Antigravity ne rend que des tokens, d'où la ligne de tarif ci-dessus.
+> Voir [AGENT_BACKENDS.md §6](AGENT_BACKENDS.md).
 
 ---
 

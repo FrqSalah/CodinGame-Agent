@@ -131,7 +131,8 @@ La couche déterministe est le garant de la vérité terrain :
 ### H. `BudgetGuard` (Comptabilité des Tokens)
 * **Classe C#** : `CodinGame.Core.ResourceGuard.BudgetGuard`
 * **Rôle** : compter les tokens et les dollars consommés, et appliquer la politique de budget. Le comptage ne dépend d'aucun agent : un agent ne peut ni s'auto-déclarer économe, ni dépasser son plafond.
-* **Fonctionnement** : intercepte les appels LLM, écrit les coûts dans l'`ExperimentStore`, publie les métriques OTLP consommées par le dashboard, et applique les plafonds et seuils de [PARAMETERS.md §5 et §6](PARAMETERS.md).
+* **Fonctionnement** : s'applique dans le **middleware de run** d'Agent Framework — un point d'interception unique pour tous les runs d'agents, sous-processus compris. Écrit les coûts dans l'`ExperimentStore`, publie les métriques OTLP consommées par le dashboard, et applique les plafonds et seuils de [PARAMETERS.md §5 et §6](PARAMETERS.md).
+* **Asymétrie à absorber** : Claude Code rend un coût estimé, Antigravity ne rend que des tokens. Le `BudgetGuard` tarife donc les tokens Antigravity depuis la grille de [PARAMETERS.md §6](PARAMETERS.md). Un plafond de CLI étant une estimation côté client, la dépense réelle peut le dépasser : le plafond du projet reste le seul qui engage. Voir [AGENT_BACKENDS.md §6](AGENT_BACKENDS.md).
 
 ---
 
@@ -148,3 +149,16 @@ La couche déterministe est le garant de la vérité terrain :
   * Lit le token depuis `~/.config/codingame/token` à chaque appel. Ne le journalise jamais, ne l'écrit jamais dans l'`ExperimentStore`, ne le committe jamais.
   * Enregistre dans l'`ExperimentStore` le rang réel, la soumission associée et son `experimentId`, une fois les battles à 100 % (avant cela le score n'est pas définitif).
 * **Refus par conception** : ne joue jamais un jeu d'arcade, même si un agent le demande. Voir [CODINGAME_API.md §6](CODINGAME_API.md).
+
+---
+
+### J. `AgentProcessRunner` (Supervision des Processus d'Agents)
+* **Classe C#** : `CodinGame.Core.Agents.AgentProcessRunner`
+* **Pourquoi dans la couche déterministe** : lancer un processus, le borner en durée, l'épingler sur des cœurs et lire sa sortie structurée est déterministe. Seul le *contenu* produit par l'agent ne l'est pas. C'est la même forme que le `MatchRunner`, pour la même raison.
+* **Rôle** : voie unique vers les CLI d'agents (Claude Code, `agy`). Les sous-classes d'`AIAgent` de `CodinGame.Agents` passent par lui et ne lancent jamais un processus elles-mêmes.
+* **Obligations** :
+  * **Affinité CPU** sur les cœurs réservés aux agents de [PARAMETERS.md §3](PARAMETERS.md). Un agent ne s'exécute jamais sur un cœur d'arène pendant un match — sous peine de rendre les mesures fausses, pas lentes.
+  * **Wall-clock appliqué ici**, jamais délégué au CLI : le `--print-timeout` d'Antigravity vaut `0s` par défaut, soit aucune limite.
+  * **Ne jamais conclure au succès sur le code de sortie.** Antigravity sort en `0` lorsqu'il refuse une action faute d'approbation. Le succès se lit dans le `status` du JSON **et** se vérifie sur le fichier produit.
+  * **Répertoire de travail restreint** au seul fichier que l'agent a le droit de modifier (voir [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md)), et credentials d'agents hors de sa portée.
+  * Normaliser les deux sémantiques d'échec en un résultat unique, pour que l'appelant n'ait pas à connaître le backend. Détail des pièges : [AGENT_BACKENDS.md §4](AGENT_BACKENDS.md).
