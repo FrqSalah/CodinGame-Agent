@@ -18,8 +18,8 @@ RUN dotnet restore CodinGame.sln
 COPY . .
 
 # Publication des exécutables
-RUN dotnet publish src/CodinGame.AppHost/CodinGame.AppHost.csproj -c Release -o /app/apphost --no-restore
-RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app/cli --no-restore
+RUN dotnet publish src/CodinGame.AppHost/CodinGame.AppHost.csproj -c Release -o /app/apphost
+RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app/cli
 
 # ========================================================
 # Stage 2: Runtime Linux (Ubuntu-based ASP.NET 10)

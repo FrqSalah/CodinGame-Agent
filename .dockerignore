@@ -1,0 +1,9 @@
+**/.git
+**/.githooks
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.idea
+*.log
+.Agent
