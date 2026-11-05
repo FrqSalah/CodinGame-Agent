@@ -480,3 +480,26 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# =====================================================================
+# Secrets (ajoute 2026-11-05)
+# Le token CodinGame vit dans ~/.config/codingame/token, HORS du depot.
+# Ces motifs sont une ceinture de securite : rien de tout cela
+# ne doit entrer dans l historique. Voir .Agent/CODINGAME_API.md §2.
+# =====================================================================
+.env
+.env.*
+!.env.example
+**/token
+*.token
+secrets.json
+secret.json
+*.pem
+*.pfx
+*.p12
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+.npmrc
+.config/codingame/

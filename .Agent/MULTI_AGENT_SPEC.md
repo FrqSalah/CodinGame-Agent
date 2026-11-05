@@ -63,6 +63,8 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
 * **Déclenchement** : reçoit une directive précise du `Reviewer` (amélioration incrémentale) ou du `Researcher` (changement d'architecture).
 * **Entrées** : code source actuel du bot, directive d'amélioration, erreurs de compilation éventuelles.
 * **Sorties** : code source modifié, committé sur `experiment/<id>`.
+* **Contrainte de format** : la soumission CodinGame est une **chaîne de code unique**, donc un **fichier unique**. Pas de projet multi-fichiers, quelle que soit la taille du bot. Le langage disponible dépend du jeu et se lit depuis l'API. Voir [CODINGAME_API.md §7](CODINGAME_API.md).
+* **Priorité de conception** : un bot qui dépasse le temps imparti, plante ou produit une action invalide est **éliminé** et perd la partie, quel que soit son score antérieur. Tenir le temps compte donc plus que jouer mieux.
 * **Validation impérative** : le code généré doit compiler en local avant d'être envoyé en tournoi. Au-delà du nombre de tentatives de compilation de [PARAMETERS.md §5](PARAMETERS.md), le Worker n'insiste pas : il escalade vers le Researcher avec les erreurs rencontrées.
 
 ---
@@ -75,7 +77,8 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
   * Winrate contre le pool d'entraînement.
   * Métriques de stabilité : nombre de timeouts, nombre de crashs.
 * **Sorties (décision formelle)** :
-  * `PROMOTE` : le SPRT a accepté `H1` **et** la stabilité est intacte (zéro timeout, zéro crash). Déclenche `PromoteExperiment`, puis émet une *demande* d'enrichissement du pool d'entraînement auprès de l'`OpponentPoolManager`. Le Reviewer ne modifie aucun pool lui-même.
+  * `PROMOTE` : le SPRT a accepté `H1` **et** la stabilité est intacte (zéro timeout, zéro crash). Déclenche `PromoteExperiment`, émet une *demande* d'enrichissement du pool d'entraînement auprès de l'`OpponentPoolManager`, puis une **demande de soumission** au `CodinGameApiGate`. Le Reviewer ne modifie aucun pool et ne soumet pas lui-même.
+    **C'est le seul verdict qui soumet.** Le budget de soumissions est la ressource la plus rare du système et il est partagé par tous les pipelines : le SPRT local est le filtre qui le protège. Voir [CODINGAME_API.md §5](CODINGAME_API.md).
   * `ROLLBACK` : le SPRT a accepté `H0`, ou la stabilité est compromise. Déclenche `AbandonExperiment` — c'est-à-dire la **suppression de la branche** `experiment/<id>`, et uniquement cela. Le motif de l'échec est journalisé dans l'`ExperimentStore`.
   * `TUNE_PARAMS` : le SPRT est non concluant au plafond de matchs. L'architecture est peut-être prometteuse, mais l'effet est sous le plancher de mesure du projet. Affinage des poids heuristiques ; au bout du nombre de cycles de [PARAMETERS.md §1](PARAMETERS.md), escalade vers le Researcher.
 
@@ -87,7 +90,10 @@ Le système se compose de 5 agents aux responsabilités strictement délimitées
 
 ### 5. Researcher Agent
 * **Mission** : décisions stratégiques de haut niveau lorsque l'optimisation incrémentale n'est plus mesurable.
-* **Déclenchement** : nombre de cycles consécutifs sans `PROMOTE` défini en [PARAMETERS.md §1](PARAMETERS.md) ; ou escalade du Worker après échecs de compilation répétés.
+* **Déclenchement** : nombre de cycles consécutifs sans `PROMOTE` défini en [PARAMETERS.md §1](PARAMETERS.md) ; escalade du Worker après échecs de compilation répétés ; **promotion de ligue** sur CodinGame ; ou divergence entre l'Elo d'ancrage et le rang réel.
+* **Deux déclencheurs venus de l'API** :
+  * **Promotion de ligue** : battre le boss fait changer de ligue, et une nouvelle ligue peut **ajouter des entrées et des actions**. Le statement doit être relu et les hypothèses du bot sont potentiellement invalidées. Ce n'est pas un gain incrémental, c'est un changement de problème.
+  * **Elo d'ancrage en hausse mais rang réel stagnant** : signal de surapprentissage sur le pool local. Le Researcher demande alors un enrichissement du pool d'entraînement plutôt qu'une nouvelle heuristique.
 * **Entrées** : historique des gains et échecs récents, profils des défaites récurrentes contre certains types d'adversaires, replays de défaites notables conservés.
 * **Sorties** :
   * Décision de changement de paradigme algorithmique (par exemple : *« l'heuristique actuelle atteint ses limites face aux stratégies agressives : basculer sur un moteur Minimax 4 plis avec table de transposition »*).

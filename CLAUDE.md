@@ -38,6 +38,11 @@ Chacune est là parce que la violer détruit des données ou fausse les mesures.
 5. **Aucun match ne démarre sans créneau CPU** attribué par l'`ArenaScheduler`. L'isolation
    n'est pas une optimisation de performance : un tournoi non isolé donne des résultats
    **faux**, pas lents.
+6. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation et ne
+   se committe jamais.** Il vit dans `~/.config/codingame/token`, hors du dépôt, et se lit
+   à chaque appel. Tout accès à l'API passe par le `CodinGameApiGate`, jamais en direct :
+   les quotas sont partagés par tous les pipelines et une seule partie de test est permise
+   à la fois. Jamais de jeu d'arcade. Voir `.Agent/CODINGAME_API.md`.
 
 Pour les documents : liens relatifs uniquement (la cible inclut Linux), pas de LaTeX
 (le rendu Markdown ne l'interprète pas), chaque fichier daté et doté d'un statut.

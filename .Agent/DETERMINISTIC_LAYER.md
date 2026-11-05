@@ -53,6 +53,11 @@ La couche déterministe est le garant de la vérité terrain :
   * **Elo d'ancrage** : calculé contre le *pool d'ancrage gelé* (§2.G). C'est la seule mesure comparable d'un cycle à l'autre, et donc la seule qui peut être tracée comme une courbe de progression.
   * **Elo d'entraînement** : calculé contre le pool d'entraînement évolutif. Utile pour la décision du cycle en cours, **non comparable** entre cycles puisque l'étalon bouge.
 
+> **Ces deux mesures sont des proxys locaux, pas l'objectif.** Depuis l'intégration de
+> l'API CodinGame, le troisième étage de mesure est le **rang réel sur le ladder**, et
+> c'est lui qui arbitre : un Elo d'ancrage qui monte alors que le rang stagne signale un
+> surapprentissage sur le pool local. Voir [CODINGAME_API.md §4](CODINGAME_API.md).
+
 * **Formule de base** (espérance de score, puis mise à jour) :
 
   ```
@@ -127,3 +132,19 @@ La couche déterministe est le garant de la vérité terrain :
 * **Classe C#** : `CodinGame.Core.ResourceGuard.BudgetGuard`
 * **Rôle** : compter les tokens et les dollars consommés, et appliquer la politique de budget. Le comptage ne dépend d'aucun agent : un agent ne peut ni s'auto-déclarer économe, ni dépasser son plafond.
 * **Fonctionnement** : intercepte les appels LLM, écrit les coûts dans l'`ExperimentStore`, publie les métriques OTLP consommées par le dashboard, et applique les plafonds et seuils de [PARAMETERS.md §5 et §6](PARAMETERS.md).
+
+---
+
+### I. `CodinGameApiGate` (Voie Unique vers l'API CodinGame)
+* **Classe C#** : `CodinGame.Core.Remote.CodinGameApiGate`
+* **Rôle** : unique point de passage vers l'API publique CodinGame. Détient le token, applique les limites externes, et sérialise les accès pour toute la ferme.
+* **Pourquoi c'est un composant à part de l'`ArenaScheduler`** : les deux ordonnancent des ressources rares, mais pas les mêmes. L'`ArenaScheduler` répartit des **cœurs CPU locaux** (plusieurs créneaux en parallèle). L'`ApiGate` protège un **compte utilisateur distant** dont les quotas sont partagés par les 40+ pipelines et qui n'autorise **qu'une seule partie de test à la fois**. Confondre les deux ferait dépasser les quotas dès le deuxième pipeline.
+* **Fonctionnement** :
+  * Sémaphore global de **capacité 1** pour les parties de test ; sur `409 test-game-running`, attend la fin de la partie en cours sur son `poll_url`.
+  * Lit `limits.requests`, `limits.submits` et `limits.test_games` dans **chaque** réponse et ralentit avant d'atteindre zéro. Les limites ne sont jamais codées en dur (voir [PARAMETERS.md §9](PARAMETERS.md)).
+  * Sur `429 rate-limited`, respecte `Retry-After` sans jamais retenter plus tôt.
+  * Préfère l'attente longue (`wait=30`) au sondage : une requête au lieu de trente.
+  * **Réserve le budget de soumissions aux verdicts `PROMOTE`.** C'est la ressource la plus rare du système ; le SPRT local est le filtre qui la protège.
+  * Lit le token depuis `~/.config/codingame/token` à chaque appel. Ne le journalise jamais, ne l'écrit jamais dans l'`ExperimentStore`, ne le committe jamais.
+  * Enregistre dans l'`ExperimentStore` le rang réel, la soumission associée et son `experimentId`, une fois les battles à 100 % (avant cela le score n'est pas définitif).
+* **Refus par conception** : ne joue jamais un jeu d'arcade, même si un agent le demande. Voir [CODINGAME_API.md §6](CODINGAME_API.md).

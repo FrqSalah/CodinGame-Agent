@@ -150,3 +150,49 @@ Le comptage est assuré par le `BudgetGuard` de la couche déterministe, pas par
 **Aucun port n'est documenté ici ni ailleurs en prose.** Les ports du dashboard Aspire et
 des endpoints OTLP sont attribués par le template et vivent dans
 `src/CodinGame.AppHost/Properties/launchSettings.json`. C'est la seule référence.
+
+---
+
+## 9. Limites imposées par l'API CodinGame
+
+> **Ces valeurs ne sont pas les nôtres.** Contrairement à tout le reste de ce fichier,
+> elles sont imposées de l'extérieur, peuvent changer sans préavis, et **ne doivent jamais
+> être codées en dur**. Les chiffres ci-dessous sont les ordres de grandeur annoncés par la
+> documentation CodinGame, donnés pour dimensionner l'architecture — pas pour être lus par
+> le code.
+
+| Limite | Ordre de grandeur annoncé | Portée |
+| :--- | :--- | :--- |
+| Requêtes API | ~120 / minute avec token (~60 / minute sans, par IP) | par utilisateur |
+| Soumissions | ~5 / 5 minutes et ~100 / 5 heures | par utilisateur |
+| Parties de test | ~10 / minute et ~600 / jour | par utilisateur |
+| Parties de test simultanées | **1** | par utilisateur |
+
+### Autorité à l'exécution
+
+Le code lit les limites, il ne les suppose pas :
+
+* Chaque réponse JSON porte `limits.requests` (et, pour les tests et soumissions,
+  `limits.submits` et `limits.test_games`) avec `limit`, `used`, `remaining` et
+  `resets_in_seconds`. C'est la source à lire après **chaque** appel.
+* L'en-tête `RateLimit` liste les mêmes fenêtres.
+* `GET /limits?challenge=<public_id>` (ou `?puzzle=<pretty_id>`) liste toutes les fenêtres.
+* Sur `429 rate-limited` : attendre `Retry-After` (aussi `retry_after_seconds` dans le
+  corps). **Ne jamais retenter plus tôt.**
+* `409 test-game-running` : une partie de test est déjà en cours ; attendre sa fin sur le
+  `poll_url` fourni.
+
+### Conséquences de dimensionnement
+
+* **Toutes les limites sont par compte, donc partagées par les 40+ pipelines.** Ce n'est
+  pas une ressource par pipeline : c'est un goulot global, distinct des créneaux CPU du §3.
+* **« Une seule partie de test à la fois » fait de l'API une voie unique** pour toute la
+  ferme. Elle exige son propre sémaphore global, de capacité 1, en plus de
+  l'`ArenaScheduler` local. Voir [DETERMINISTIC_LAYER.md §2.I](DETERMINISTIC_LAYER.md).
+* **Le budget de soumissions est la ressource la plus rare du système.** Une soumission ne
+  part que sur un verdict `PROMOTE` ; le SPRT local est le filtre qui protège ce budget.
+* Attendre avec `wait=30` coûte **une** requête là où interroger chaque seconde en coûte
+  trente : toujours préférer l'attente longue au sondage.
+* Le volume de l'API est inférieur de deux ordres de grandeur au besoin d'une évaluation
+  SPRT (§1). L'arène locale n'est donc pas optionnelle — voir
+  [CODINGAME_API.md §3](CODINGAME_API.md).

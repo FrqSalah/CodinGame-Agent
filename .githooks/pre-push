@@ -1,0 +1,49 @@
+#!/bin/sh
+# Second filet : refuse de pousser des commits contenant le token CodinGame.
+#
+# Le hook pre-commit se contourne avec --no-verify, et un agent autonome peut tres bien
+# passer ce drapeau. Ici on inspecte ce qui part reellement vers le remote.
+#
+# Installation (une fois par clone) : git config core.hooksPath .githooks
+
+set -u
+
+tokfile="$HOME/.config/codingame/token"
+[ -s "$tokfile" ] || exit 0
+tok=$(tr -d '\r\n' < "$tokfile")
+[ ${#tok} -ge 16 ] || exit 0
+
+say() { printf '%s\n' "$*" >&2; }
+zero=$(git hash-object -t tree /dev/null)
+
+# stdin : <local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"            # nouvelle branche : tous ses commits
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  revs=$(git rev-list "$range" 2>/dev/null) || continue
+  [ -z "$revs" ] && continue
+
+  if git grep -qF "$tok" $revs -- 2>/dev/null; then
+    say "PUSH REFUSE — le token CodinGame est present dans les commits a pousser."
+    say ""
+    say "  Commits concernes :"
+    for r in $revs; do
+      if git grep -qF "$tok" "$r" -- 2>/dev/null; then
+        say "    $(git log -1 --format='%h %s' "$r")"
+      fi
+    done
+    say ""
+    say "  Un secret pousse est compromis, meme retire ensuite."
+    say "  1. Revoque le token : https://www.codingame.com/settings/tokens"
+    say "  2. Reecris l'historique concerne avant de pousser."
+    exit 1
+  fi
+done
+
+exit 0

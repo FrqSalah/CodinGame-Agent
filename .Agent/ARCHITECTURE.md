@@ -12,7 +12,9 @@ de microservices cloud-native **.NET Aspire** et le framework d'agents
 ### Périmètre v1
 
 * Duels **1v1** uniquement. Les jeux à 3 joueurs ou plus et les jeux à information cachée sont hors périmètre.
-* Boucle d'optimisation **locale** : referee officiel du jeu, pool d'adversaires local.
+* Boucle d'optimisation **locale** (referee officiel, pool d'adversaires local) pour
+  l'itération, et **API publique CodinGame** pour la soumission et le rang réel. Les deux
+  arènes ont des rôles distincts : voir [CODINGAME_API.md §3](CODINGAME_API.md).
 * Une seule machine hôte (voir [PARAMETERS.md §3](PARAMETERS.md)).
 
 ```
@@ -53,6 +55,7 @@ de microservices cloud-native **.NET Aspire** et le framework d'agents
 ┌────────────────────────────────────────────────────────────────────────┐
 │                 COUCHE DÉTERMINISTE & ISOLATION SYSTÈME                │
 │  - ArenaScheduler : sémaphore global des créneaux CPU                  │
+│  - CodinGameApiGate : voie unique vers l'API (soumissions, rang)       │
 │  - MatchRunner : ProcessorAffinity, timeouts par jeu, détection crash  │
 │  - ExperimentStore : matches.db, source de vérité unique               │
 │  - OpponentPoolManager : pool d'ancrage gelé + pool d'entraînement     │
@@ -127,22 +130,31 @@ correspondance pour la lecture des anciens textes :
 
 ---
 
-## 3. Lacune connue : pas de lien avec le classement réel
+## 3. Lien avec le classement réel
 
-La boucle décrite ci-dessus est **fermée** : elle optimise contre un pool d'adversaires
-local. Or la mission du projet est un classement sur CodinGame. Aucun composant ne soumet
-de bot à CodinGame ni ne lit le rang réel.
+**Résolu le 2026-11-05.** CodinGame expose une API publique officielle destinée aux agents
+de code, qui lit les règles, lance des parties de test, soumet un bot et suit le classement
+réel. La boucle n'est donc plus fermée sur un pool local, et la question des conditions
+d'utilisation ne se pose plus : cet usage est le but affiché de l'API.
 
-Conséquence : le système peut progresser contre lui-même sans progresser sur le ladder, et
-rien dans la boucle actuelle ne permet de le détecter. Le pool d'ancrage gelé
-(voir [DETERMINISTIC_LAYER.md §2.G](DETERMINISTIC_LAYER.md)) limite la dérive de mesure,
-mais ne remplace pas une mesure externe.
+Spécification complète de l'intégration : [CODINGAME_API.md](CODINGAME_API.md). Les trois
+points structurants :
 
-**À trancher avant la Phase 4** : par quel moyen le rang réel est mesuré, à quelle
-fréquence, et sous quelles contraintes (CodinGame n'expose pas d'API publique de
-soumission ; l'automatiser peut contrevenir aux conditions d'utilisation). Une soumission
-manuelle hebdomadaire avec saisie du rang dans l'`ExperimentStore` est une réponse
-acceptable — l'absence de décision n'en est pas une.
+1. **Deux arènes aux rôles distincts.** L'arène locale fournit le signal d'itération
+   (SPRT, 100 à 2000 matchs) ; l'API fournit la vérité terrain du rang. Le volume autorisé
+   par l'API est inférieur de deux ordres de grandeur au besoin d'une évaluation, donc
+   l'arène locale reste la seule façon de faire progresser le bot.
+2. **Un second goulot, global.** Les limites de l'API sont par compte, donc partagées par
+   tous les pipelines, et une seule partie de test peut tourner à la fois. Cela impose un
+   `CodinGameApiGate` de capacité 1 à côté de l'`ArenaScheduler`
+   (voir [DETERMINISTIC_LAYER.md §2.I](DETERMINISTIC_LAYER.md)).
+3. **La mesure devient à trois étages** : Elo d'entraînement, Elo d'ancrage, puis rang
+   réel. Un Elo d'ancrage qui monte alors que le rang stagne est le signal du
+   surapprentissage sur le pool local — que rien ne permettait de détecter auparavant.
+
+**Contrainte de périmètre** : les jeux d'arcade (puzzles classiques, Clash of Code, Coding
+Escape) ne sont jamais joués par le système, ni via l'API qui les refuse, ni en écrivant
+une solution à coller. Voir [CODINGAME_API.md §6](CODINGAME_API.md).
 
 ---
 

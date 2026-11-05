@@ -1,0 +1,65 @@
+#!/bin/sh
+# Refuse tout commit qui embarquerait un secret.
+#
+# Pourquoi ce hook existe : GitRepositoryManager.CommitExperimentAsync fait `git add -A`
+# puis commit, sans intervention humaine. Un secret qui traîne dans l'arborescence serait
+# donc committé — et poussé — par un agent qui ne sait pas ce qu'il ramasse.
+#
+# Installation (une fois par clone) : git config core.hooksPath .githooks
+# Contournable avec --no-verify : le hook pre-push sert de second filet.
+
+set -u
+fail=0
+
+say() { printf '%s\n' "$*" >&2; }
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# --- 1. Chemins interdits -----------------------------------------------------
+bad_paths=$(printf '%s\n' "$staged" | grep -iE \
+  '(^|/)\.env($|\.)|(^|/)token$|\.token$|(^|/)secrets?\.json$|\.pem$|\.pfx$|\.p12$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|(^|/)\.npmrc$|(^|/)\.config/codingame/' \
+  || true)
+if [ -n "$bad_paths" ]; then
+  say "COMMIT REFUSE — fichier de secret dans l'index :"
+  printf '  %s\n' $bad_paths >&2
+  say ""
+  say "  Un secret ne vit jamais dans le depot. Sors-le de l'arborescence,"
+  say "  puis : git restore --staged <fichier>"
+  fail=1
+fi
+
+# --- 2. Valeur exacte du token CodinGame --------------------------------------
+# Le token vit hors du depot ; on le lit pour verifier qu'il n'a pas ete recopie dedans.
+tokfile="$HOME/.config/codingame/token"
+if [ -s "$tokfile" ]; then
+  tok=$(tr -d '\r\n' < "$tokfile")
+  if [ ${#tok} -ge 16 ] && git diff --cached | grep -qF "$tok"; then
+    say "COMMIT REFUSE — le token CodinGame apparait dans les modifications indexees."
+    say ""
+    say "  Retire-le du code. Il doit etre lu a l'execution depuis"
+    say "  ~/.config/codingame/token, jamais ecrit dans un fichier du depot."
+    say "  Si le token a fuite, revoque-le : https://www.codingame.com/settings/tokens"
+    fail=1
+  fi
+fi
+
+# --- 3. Token en dur dans un en-tete Authorization ----------------------------
+# Ne matche pas les formes documentaires : "Bearer $(cat ...)" ni "Bearer <token>".
+hits=$(git diff --cached | grep -nE '^\+.*[Bb]earer[[:space:]]+[A-Za-z0-9_.~+/=-]{20,}' || true)
+if [ -n "$hits" ]; then
+  say "COMMIT REFUSE — token ecrit en dur dans un en-tete Authorization :"
+  printf '%s\n' "$hits" | cut -c1-120 | sed 's/^/  /' >&2
+  say ""
+  say "  Lis le token a l'execution : -H \"Authorization: Bearer \$(cat ~/.config/codingame/token)\""
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  say ""
+  say "(Ce hook est volontairement strict. Rien ne justifie un secret dans l'historique :"
+  say " un historique se reecrit mal, et un secret pousse est a considerer comme compromis.)"
+  exit 1
+fi
+
+exit 0

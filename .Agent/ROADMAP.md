@@ -12,12 +12,14 @@
 - [x] Rédaction du socle de connaissances dans le dossier `.Agent/`.
 - [x] Centralisation des paramètres numériques dans [PARAMETERS.md](PARAMETERS.md).
 
+### Décisions tranchées le 2026-11-05
+
+- [x] **Mesure du rang réel sur CodinGame** — l'API publique officielle le fournit. Spécification : [CODINGAME_API.md](CODINGAME_API.md). Token obtenu par device flow OAuth.
+- [x] **Format de soumission du bot** — une **chaîne de code unique**, donc un fichier unique, pas de projet multi-fichiers. Voir [CODINGAME_API.md §7](CODINGAME_API.md).
+
 ### Décisions encore ouvertes
 
-Ces trois points bloquent des phases ultérieures et doivent être tranchés par l'humain :
-
-- [ ] **Mesure du rang réel sur CodinGame** (bloque la Phase 4) — voir [ARCHITECTURE.md §3](ARCHITECTURE.md). La boucle actuelle est fermée sur un pool local.
-- [ ] **Langage des bots** et contraintes de soumission (fichier unique, limite de taille) — contraint directement la façon dont le Worker structure son code.
+- [ ] **Langage du bot** : la liste des langages est propre à chaque jeu et ne se lit qu'avec un token. À relever sur le jeu témoin avant d'écrire le premier bot.
 - [ ] **Estimateur Elo** : mise à jour itérative à facteur K, ou ajustement par maximum de vraisemblance (Bradley-Terry) — voir [DETERMINISTIC_LAYER.md §2.C](DETERMINISTIC_LAYER.md).
 
 ---
@@ -54,6 +56,7 @@ Ces trois points bloquent des phases ultérieures et doivent être tranchés par
 - [ ] Implémentation de l'`EloCalculator` (Elo d'ancrage, Elo d'entraînement, verdict SPRT).
 - [ ] Implémentation du `BudgetGuard` (comptage des tokens, application des plafonds).
 - [ ] Implémentation du `DiskQuotaManager` (purge automatique des replays volumineux).
+- [ ] Implémentation du `CodinGameApiGate` (voie unique vers l'API : sémaphore de capacité 1, lecture des limites à chaque réponse, respect des `Retry-After`, soumission réservée aux `PROMOTE`).
 - [ ] Tests unitaires sur l'`EloCalculator` et le verdict SPRT — ce sont les calculs dont une erreur silencieuse fausserait toutes les décisions du système.
 
 ### Phase 3 : Outils et Agents (Agent Framework)
@@ -66,13 +69,13 @@ Ces trois points bloquent des phases ultérieures et doivent être tranchés par
 
 ### Phase 4 : Premier Banc d'Essai Réel (Jeu Témoin)
 * Objectif : valider une boucle complète autonome sur un vrai jeu CodinGame.
-* **Prérequis** : la décision sur la mesure du rang réel doit être tranchée (voir ci-dessus).
-* **Critère d'acceptation** : le système enchaîne au moins 5 cycles sans intervention humaine, et l'Elo d'ancrage progresse de façon statistiquement établie.
-- [ ] Choix du premier jeu (par exemple *Tron Battle* ou un duel 1v1 équivalent).
-- [ ] Intégration du referee officiel.
-- [ ] Lancement d'une boucle autonome : le Worker modifie le bot ──▶ l'arène évalue par SPRT ──▶ le Reviewer acte la promotion ou l'abandon.
-- [ ] Visualisation en direct des courbes d'Elo d'ancrage et des traces sur le Dashboard Aspire.
-- [ ] Mesure du rang réel selon la méthode décidée.
+* **Critère d'acceptation** : le système enchaîne au moins 5 cycles sans intervention humaine, l'Elo d'ancrage progresse de façon statistiquement établie, **et le rang réel sur CodinGame progresse aussi**.
+- [ ] Choix du premier jeu parmi les puzzles de bot programming listés par l'API.
+- [ ] Relevé des langages disponibles sur ce jeu, puis choix du langage du bot.
+- [ ] Intégration du referee officiel pour l'arène locale.
+- [ ] Lancement d'une boucle autonome : le Worker modifie le bot ──▶ l'arène locale évalue par SPRT ──▶ le Reviewer acte la promotion ou l'abandon ──▶ un `PROMOTE` soumet via le `CodinGameApiGate`.
+- [ ] Visualisation en direct de l'Elo d'ancrage **et du rang réel** sur le Dashboard Aspire, pour détecter leur divergence.
+- [ ] Vérifier qu'une soumission n'est lue qu'une fois ses battles à 100 % (avant cela le score n'est pas définitif).
 
 ### Phase 5 : Conteneurisation & Publication Multi-Pipelines
 * Objectif : déployer et faire tourner plusieurs pipelines en parallèle sur n'importe quelle machine ou VPS Linux. La cible de pipelines provisionnés est en [PARAMETERS.md §4](PARAMETERS.md).
