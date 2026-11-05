@@ -17,8 +17,8 @@ RUN dotnet restore CodinGame.sln
 # Copie de tout le code source
 COPY . .
 
-# Publication des exécutables
-RUN dotnet publish src/CodinGame.AppHost/CodinGame.AppHost.csproj -c Release -o /app/apphost
+# Build de l'AppHost et publication du CLI
+RUN dotnet build src/CodinGame.AppHost/CodinGame.AppHost.csproj -c Release -o /app/apphost
 RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app/cli
 
 # ========================================================
