@@ -16,10 +16,11 @@
 
 - [x] **Mesure du rang réel sur CodinGame** — l'API publique officielle le fournit. Spécification : [CODINGAME_API.md](CODINGAME_API.md). Token obtenu par device flow OAuth.
 - [x] **Format de soumission du bot** — une **chaîne de code unique**, donc un fichier unique, pas de projet multi-fichiers. Voir [CODINGAME_API.md §7](CODINGAME_API.md).
+- [x] **Langage du bot — C#.** Le seul bloquant était la disponibilité par jeu : relevée, elle est acquise. Les 12 duels 1v1 les mieux notés proposent tous C#, et `connect-4` en expose 27 dont C#, F# et VB.NET. Le bot reste donc sur la pile .NET du projet, sans exception à justifier. Voir [CODINGAME_API.md §9.3](CODINGAME_API.md).
+- [x] **Le contest en cours n'est pas le jeu témoin** — fenêtre de quelques jours, règles fermées sans inscription, et un contest disparaît alors qu'une mesure comparable entre cycles exige un jeu rejouable. Motifs en [CODINGAME_API.md §9.4](CODINGAME_API.md).
 
 ### Décisions encore ouvertes
 
-- [ ] **Langage du bot** : la liste des langages est propre à chaque jeu et ne se lit qu'avec un token. À relever sur le jeu témoin avant d'écrire le premier bot.
 - [ ] **Estimateur Elo** : mise à jour itérative à facteur K, ou ajustement par maximum de vraisemblance (Bradley-Terry) — voir [DETERMINISTIC_LAYER.md §2.C](DETERMINISTIC_LAYER.md).
 
 ---
@@ -70,9 +71,9 @@
 ### Phase 4 : Premier Banc d'Essai Réel (Jeu Témoin)
 * Objectif : valider une boucle complète autonome sur un vrai jeu CodinGame.
 * **Critère d'acceptation** : le système enchaîne au moins 5 cycles sans intervention humaine, l'Elo d'ancrage progresse de façon statistiquement établie, **et le rang réel sur CodinGame progresse aussi**.
-- [ ] Choix du premier jeu parmi les puzzles de bot programming listés par l'API.
-- [ ] Relevé des langages disponibles sur ce jeu, puis choix du langage du bot.
-- [ ] Intégration du referee officiel pour l'arène locale.
+- [ ] **Confirmer le jeu témoin. Recommandation : `connect-4`** — critères, candidats mesurés et motifs en [CODINGAME_API.md §9](CODINGAME_API.md). Le choix n'est pas tracé comme décidé tant qu'il n'est pas confirmé.
+- [x] Relevé des langages disponibles, et choix du langage du bot — voir les décisions tranchées ci-dessus.
+- [ ] **Intégration du referee officiel pour l'arène locale** — dernière inconnue matérielle de cette phase : l'API ne fournit pas le referee. Tant qu'il manque, l'arène locale n'existe pas, et [CODINGAME_API.md §3](CODINGAME_API.md) montre que l'API seule est insuffisante d'un facteur cent. À lever avant d'engager la phase.
 - [ ] Lancement d'une boucle autonome : le Worker modifie le bot ──▶ l'arène locale évalue par SPRT ──▶ le Reviewer acte la promotion ou l'abandon ──▶ un `PROMOTE` soumet via le `CodinGameApiGate`.
 - [ ] Visualisation en direct de l'Elo d'ancrage **et du rang réel** sur le Dashboard Aspire, pour détecter leur divergence.
 - [ ] Vérifier qu'une soumission n'est lue qu'une fois ses battles à 100 % (avant cela le score n'est pas définitif).

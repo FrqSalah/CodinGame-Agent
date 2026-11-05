@@ -42,6 +42,37 @@ La skill agent officielle est installée dans `~/.claude/skills/codingame/` (voi
 pour la commande d'installation). Une seconde skill, *contributions*, écrit des puzzles et
 Clash of Code pour l'utilisateur : **hors périmètre de ce projet**.
 
+### 2.1 Le token dans un conteneur
+
+`~/.config/codingame/token` désigne le `HOME` du processus. Dans un conteneur, c'est le
+`HOME` **du conteneur** : le fichier de l'hôte n'y est pas, et le `CodinGameApiGate`
+échouera en `401 missing-token` sans que rien d'autre ne semble cassé.
+
+Règles, par ordre de préférence :
+
+1. **Montage en lecture seule** du fichier de l'hôte vers le `HOME` du conteneur. Le token
+   reste un fichier appartenant à l'utilisateur, hors de toute image et de tout dépôt.
+2. **Secret d'orchestrateur** monté comme fichier (`docker secret`, `secrets:` de Compose).
+   Même propriété : le token est un fichier, jamais une valeur dans un descripteur.
+3. **Variable d'environnement** : acceptée en dernier recours seulement. Une variable
+   d'environnement se lit dans `docker inspect`, fuit dans les dumps de crash et dans les
+   traces OpenTelemetry que ce projet exporte précisément vers un dashboard.
+
+Trois interdits qui découlent du reste de ce document :
+
+* **Jamais de token dans un fichier suivi par git**, y compris un gabarit d'environnement.
+  Un gabarit est fait pour être committé : y ajouter une ligne de token, c'est inviter la
+  valeur à être saisie dans le fichier suivi plutôt que dans sa copie ignorée.
+* **Jamais de token dans une couche d'image.** Une couche n'oublie pas : un fichier ajouté
+  puis supprimé dans une couche ultérieure reste lisible dans l'image. Un `COPY . .` sans
+  `.dockerignore` embarque tout le contexte de build, `.env` compris.
+* **Jamais de token dans un dashboard publié.** Le dashboard expose la télémétrie, donc
+  les appels sortants. Publier son port revient à publier ce qu'il montre.
+
+> Le `.gitignore` et les hooks du dépôt couvrent le cas du fichier et de la valeur
+> littérale. Ils ne couvrent **pas** une image, une variable d'environnement ni un port
+> publié : ces trois-là ne passent pas par un commit.
+
 ## 3. Deux arènes, deux rôles — ne jamais les confondre
 
 C'est la conséquence architecturale la plus importante.
@@ -138,7 +169,97 @@ Utiles au Worker, et cohérentes avec la couche déterministe locale :
   attendu, puis vider `stdout`.
 * Quand le statement contredit ces conventions, **le statement gagne**.
 
-## 9. Documentation de référence
+## 9. Catalogue relevé le 2026-11-05 et choix du jeu témoin
+
+> Ce relevé est **daté** : le catalogue CodinGame évolue, les ligues du compte changent dès
+> la première soumission. Les chiffres ci-dessous sont un instantané, pas une constante du
+> projet — ils n'ont donc rien à faire dans [PARAMETERS.md](PARAMETERS.md).
+
+### 9.1 Ce que le compte voit
+
+* **144 puzzles non-arcade** : 98 bot-programming, 27 code-golf, 19 optimization.
+* **21 challenges**, dont un seul en cours (voir §9.4).
+* Le `statement` d'un puzzle multijoueur est **lisible sans inscription ni partie jouée**.
+  Celui d'un contest ne l'est **qu'après inscription**. Deux régimes d'accès différents :
+  le pipeline peut donc préparer un puzzle multijoueur de bout en bout sans rien engager
+  sur le compte, ce qui n'est pas vrai d'un contest.
+* Le champ `community` distingue les jeux écrits par la communauté des contests officiels
+  reconvertis en multijoueur. L'API **n'expose pas le referee** : `community` indique
+  seulement de quel côté chercher sa source. À vérifier avant de figer un choix (§9.5).
+
+### 9.2 Critères de sélection du jeu témoin
+
+Le jeu témoin n'est pas choisi pour être gagné, mais pour **valider la boucle**. D'où un
+ordre de critères inhabituel :
+
+1. **Duel 1v1 strict** (`players_min == players_max == 2`). L'appariement obligatoire de
+   [PARAMETERS.md §1](PARAMETERS.md) joue chaque confrontation deux fois places échangées :
+   cela suppose exactement deux places.
+2. **Information parfaite, aucun aléa.** Le critère d'acceptation de la Phase 0 est la
+   reproductibilité à seed identique. Un jeu à aléa non contrôlé par le seed rend cette
+   preuve impossible — et sans elle, toutes les mesures qui suivent sont douteuses.
+3. **Parties courtes.** Une évaluation SPRT consomme de 100 à 2000 matchs
+   ([PARAMETERS.md §1](PARAMETERS.md)). La durée d'une partie est donc le facteur dominant
+   du coût CPU de tout le projet, bien avant la qualité du bot.
+4. **Classement profond.** Le rang réel est l'un des trois étages de mesure (§4) ; un rang
+   relevé sur quelques dizaines de joueurs est du bruit, pas un signal.
+5. **C# disponible**, pour rester sur la pile .NET de [ARCHITECTURE.md](ARCHITECTURE.md).
+6. **Statement lisible sans engagement** sur le compte.
+
+### 9.3 Candidats mesurés
+
+Les 12 jeux les mieux notés sont **tous** des duels 1v1 et **tous** proposent C#. Le
+critère discriminant n'est donc ni le format ni le langage, mais la profondeur du
+classement et la complexité du jeu.
+
+| Jeu | Note (votes) | Joueurs classés | Ligue du compte | Statement |
+| :--- | :--- | :--- | :--- | :--- |
+| `connect-4` | 4.90 (84) | **973** | Wood 2 | 4093 car. |
+| `a-code-of-ice-and-fire` | 4.89 (107) | 918 | Wood 3 | 6796 car. |
+| `dots-and-boxes` | 4.94 (69) | 728 | Wood 2 | 2644 car. |
+| `othello-1` | 4.92 (63) | 667 | Wood 2 | 3583 car. |
+| `chess` | 4.87 (46) | 517 | Wood 2 | 7822 car. |
+| `ataxx` | 5.00 (4) | 61 | Wood 2 | 3084 car. |
+
+> **`ataxx` illustre le piège que ce projet combat.** Meilleure note du catalogue — sur
+> **4 votes**. C'est exactement l'effet non mesurable que le SPRT de
+> [PARAMETERS.md §1](PARAMETERS.md) est là pour refuser. Un classement de 61 joueurs ne
+> peut pas servir d'étage de mesure : on ne choisit pas un jeu témoin sur une moyenne
+> dont l'intervalle de confiance couvre tout l'intervalle possible.
+
+**Recommandation : `connect-4`.** Information parfaite, aucun aléa, 42 coups au maximum
+donc les parties les plus courtes du lot, règles tenant en 4093 caractères, et le
+classement le plus profond des candidats comparables. Les 27 langages disponibles
+couvrent C#, F# et VB.NET.
+
+`chess` et `a-code-of-ice-and-fire` sont écartés pour la Phase 4 non par difficulté de jeu
+mais par **durée de partie et volume de règles** : au prix d'une évaluation SPRT, ils
+coûtent plusieurs fois `connect-4` pour valider exactement la même boucle.
+
+### 9.4 Le contest en cours n'est pas le jeu témoin
+
+Un contest était en cours au moment du relevé (`fall-challenge-2026`, fin le
+2026-11-09T09:00:00Z), compte **non inscrit**. Il ne sert pas de jeu témoin :
+
+* Sa fenêtre est de quelques jours, alors que le projet est en Phase 1 avec un build non
+  vérifié ([ROADMAP.md](ROADMAP.md)). Valider une boucle autonome contre une horloge est
+  l'inverse de ce que demande la Phase 0.
+* Ses règles ne sont lisibles qu'après inscription, et l'inscription est une action sur le
+  compte de l'utilisateur : elle demande son accord explicite, elle ne se déduit pas d'un
+  objectif de projet.
+* Un contest ferme. Un puzzle multijoueur reste disponible, donc rejouable — ce qu'exige
+  une mesure comparable entre cycles.
+
+### 9.5 Ce qui reste à vérifier avant de figer le choix
+
+* **Le referee.** L'arène locale a besoin du referee officiel du jeu, et l'API ne le
+  fournit pas. C'est la dernière inconnue matérielle de la Phase 4 : sans referee local,
+  les ~600 parties de test par jour de [PARAMETERS.md §9](PARAMETERS.md) sont le seul moyen
+  de jouer, et §3 du présent document explique pourquoi cela ne suffit pas d'un facteur cent.
+* **Le format d'entrée exact**, à lire dans le statement puis à confronter au générateur
+  de stub (§10).
+
+## 10. Documentation de référence
 
 Installée localement avec la skill, et en ligne :
 

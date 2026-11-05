@@ -42,7 +42,10 @@ Chacune est là parce que la violer détruit des données ou fausse les mesures.
    se committe jamais.** Il vit dans `~/.config/codingame/token`, hors du dépôt, et se lit
    à chaque appel. Tout accès à l'API passe par le `CodinGameApiGate`, jamais en direct :
    les quotas sont partagés par tous les pipelines et une seule partie de test est permise
-   à la fois. Jamais de jeu d'arcade. Voir `.Agent/CODINGAME_API.md`.
+   à la fois. Jamais de jeu d'arcade. En conteneur, `~` n'est plus celui de l'hôte : le
+   token se **monte** en lecture seule, il ne se met ni dans une image, ni dans un gabarit
+   suivi par git, ni dans une variable d'environnement. Voir `.Agent/CODINGAME_API.md`
+   §2.1.
 
 Pour les documents : liens relatifs uniquement (la cible inclut Linux), pas de LaTeX
 (le rendu Markdown ne l'interprète pas), chaque fichier daté et doté d'un statut.

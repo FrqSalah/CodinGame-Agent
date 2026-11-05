@@ -38,7 +38,7 @@ disponibles — voir [STRATEGY_ANALYSIS.md §4](STRATEGY_ANALYSIS.md).
 | [PARAMETERS.md](PARAMETERS.md) | **Source unique de toute valeur numérique** : matchs, SPRT, timeouts, cœurs, cadence, budget, rétention. Aucun autre document ne recopie un chiffre. |
 | [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) | Retour d'expérience du n°1 mondial CodinGame : pièges réels évités, économie du projet, et pourquoi 40+ pipelines tiennent sur 16 cœurs. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Choix techniques : 100 % .NET, .NET Aspire, **Microsoft Agent Framework**, Docker. Contient la décision SK → Agent Framework. |
-| [CODINGAME_API.md](CODINGAME_API.md) | Intégration de l'API publique CodinGame : token par device flow, **deux arènes aux rôles distincts**, mesure à trois étages, limites externes, règles de conduite, contraintes sur le code du bot. |
+| [CODINGAME_API.md](CODINGAME_API.md) | Intégration de l'API publique CodinGame : token par device flow, **deux arènes aux rôles distincts**, mesure à trois étages, limites externes, règles de conduite, contraintes sur le code du bot, et **critères de choix du jeu témoin** avec le catalogue relevé. |
 | [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md) | Les 5 rôles d'agents (Admin, Utils-Writer, Reviewer, Researcher, Worker/Coder) et les garde-fous de boucle. |
 | [DETERMINISTIC_LAYER.md](DETERMINISTIC_LAYER.md) | Couche non-LLM : ArenaScheduler, MatchRunner, ExperimentStore, OpponentPoolManager, Git, Elo, BudgetGuard, quotas disque. |
 | [ROADMAP.md](ROADMAP.md) | Feuille de route par phase, critères d'acceptation, et décisions encore ouvertes. |
