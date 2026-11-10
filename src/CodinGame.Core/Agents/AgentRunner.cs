@@ -271,6 +271,6 @@ public sealed partial class AntigravityRunner(ILogger<AntigravityRunner> log) : 
 
     private static string Tail(string s) => s.Length <= 500 ? s.Trim() : "…" + s[^500..].Trim();
 
-    [GeneratedRegex(@"^\s*([a-z0-9][a-z0-9.\-]*[a-z0-9])\s{2,}\S")]
+    [GeneratedRegex(@"^\s*([a-z0-9][a-z0-9.\-]*[a-z0-9])(?:\t|\s{2,})\S")]
     private static partial Regex ModelLine();
 }

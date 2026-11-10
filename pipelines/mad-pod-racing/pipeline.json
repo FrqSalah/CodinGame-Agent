@@ -7,9 +7,9 @@
     "compilation": "g++ -std=c++20 -o {sortie} {source} -lm -lpthread"
   },
   "agents": {
-    "penseur": { "outil": "agy", "modele": "gemini-3.1-pro-high", "minutes_max": 20 },
+    "penseur": { "outil": "agy", "modele": "claude-opus-4-6-thinking", "minutes_max": 20 },
     "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-medium", "minutes_max": 20 },
-    "regard_neuf": { "outil": "agy", "modele": "gemini-3.1-pro-high", "minutes_max": 20 }
+    "regard_neuf": { "outil": "agy", "modele": "gemini-3.8-flash-high", "minutes_max": 20 }
   },
   "arene": {
     "arbitre": "csbref",
@@ -26,7 +26,8 @@
   },
   "api": {
     "parties_confirmation": 4,
-    "adversaire": "boss"
+    "adversaire": "boss",
+    "soumettre_champions": true
   },
   "boucle": {
     "actif": true,

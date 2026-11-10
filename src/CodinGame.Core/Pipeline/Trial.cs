@@ -201,6 +201,13 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         journal.SetChampion(hash, id);
         await File.WriteAllTextAsync(ctx.Paths.ChampionFile(botFile), candidate, ct);
+        if (cfg.Api.SoumettreChampions)
+        {
+            var submission = await api.SubmitAsync(cfg.Jeu, cfg.Langage, candidate, ct);
+            log.LogInformation("Essai {Essai} : nouveau champion soumis au classement (soumission {Soumission})", id, submission);
+            score += $" ; soumis au classement ({submission})";
+        }
+
         return (new TrialVerdict(Verdicts.Kept, score), duel);
     }
 

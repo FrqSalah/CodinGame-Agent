@@ -25,8 +25,8 @@ public sealed record TestGameResult(GameLog? Log, string? Failure);
 /// <summary>
 /// Seul point d'accès à l'API publique CodinGame. Le token est relu à chaque appel et
 /// n'apparaît jamais dans un journal ni une erreur. Une seule partie de test à la fois ;
-/// les limites sont lues dans chaque réponse, jamais supposées. Aucune méthode ne soumet
-/// de bot au classement : c'est une décision de l'utilisateur.
+/// les limites sont lues dans chaque réponse, jamais supposées. La soumission au classement
+/// n'est appelée que si la configuration l'autorise (<c>api.soumettre_champions</c>).
 /// </summary>
 public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<CodinGameClient> log)
 {
@@ -113,6 +113,14 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         {
             TestGameGate.Release();
         }
+    }
+
+    /// <summary>Soumet un bot au classement. Peut faire changer de ligue, donc de règles.</summary>
+    public async Task<long> SubmitAsync(string puzzle, string language, string code, CancellationToken ct)
+    {
+        var r = await SendAsync(HttpMethod.Post, $"/puzzles/{puzzle}/submissions",
+            new JsonObject { ["language"] = language, ["code"] = code }, ct);
+        return r.GetProperty("submission_id").GetInt64();
     }
 
     /// <summary>Parties de test restantes sur la fenêtre la plus contraignante, ou null si inconnu.</summary>

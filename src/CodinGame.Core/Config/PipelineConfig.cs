@@ -23,7 +23,7 @@ public sealed record ArenaSettings(
     double Alpha,
     double Beta);
 
-public sealed record ApiSettings(int PartiesConfirmation, string Adversaire);
+public sealed record ApiSettings(int PartiesConfirmation, string Adversaire, bool SoumettreChampions);
 
 public sealed record LoopSettings(
     bool Actif,
