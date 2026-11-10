@@ -1,0 +1,9 @@
+[Unit]
+Description=Déploie la dernière version validée de la ferme CodinGame
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/codingame-farm/repo/deploy/update.sh
+TimeoutStartSec=1800

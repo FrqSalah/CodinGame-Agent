@@ -1,30 +1,33 @@
-name: CI - Build & Test
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build & Verify Solution (.NET 10)
+    name: Compilation, tests et image
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # L'image compile la solution et joue les tests, parties réelles avec le moteur comprises.
+      - name: Image Docker (compilation + tests)
+        run: docker build -t codingame-farm:ci .
 
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore NuGet packages
-        run: dotnet restore CodinGame.sln
-
-      - name: Build Solution (Release)
-        run: dotnet build CodinGame.sln --no-restore -c Release
-
-      - name: Verify Docker Build
-        run: docker build -t codingame-farm:test .
+  deploy:
+    name: Publier pour le VPS
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      # Le VPS suit la branche « deploy » : elle n'avance que sur un commit validé.
+      - name: Avancer la branche deploy
+        run: git push --force origin HEAD:refs/heads/deploy

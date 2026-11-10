@@ -38,3 +38,8 @@ id_ecdsa
 id_ed25519
 .npmrc
 .config/codingame/
+
+# Données locales de la ferme
+farm-data
+**/bin
+**/obj

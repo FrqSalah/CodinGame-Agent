@@ -1,56 +1,49 @@
-# ========================================================
-# Stage 1: Build & Publish
-# ========================================================
+# ---- Moteur du jeu : robostac/coders-strike-back-referee (MIT), version figée ----
+FROM golang:1.24-bookworm AS referee
+ARG CSBREF_COMMIT=f96d1960cbb861a7191760034620aaa51f057767
+RUN git clone --quiet https://github.com/robostac/coders-strike-back-referee /src/csbref \
+ && cd /src/csbref && git checkout --quiet "$CSBREF_COMMIT" \
+ && CGO_ENABLED=0 go build -o /out/csbref csbref.go
+
+# ---- Compilation et tests (les tests jouent de vraies parties avec le moteur) ----
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
+COPY --from=referee /out/csbref /usr/local/bin/csbref
 WORKDIR /src
+COPY global.json Directory.Build.props Directory.Packages.props CodinGame.sln ./
+COPY src/ src/
+COPY tests/ tests/
+COPY pipelines/ pipelines/
+RUN dotnet test --project tests/CodinGame.Tests/CodinGame.Tests.csproj -c Release
+RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app
 
-# Copie des fichiers de configuration et projets pour la mise en cache des layers NuGet
-COPY CodinGame.sln Directory.Build.props ./
-COPY src/CodinGame.AppHost/CodinGame.AppHost.csproj src/CodinGame.AppHost/
-COPY src/CodinGame.ServiceDefaults/CodinGame.ServiceDefaults.csproj src/CodinGame.ServiceDefaults/
-COPY src/CodinGame.Core/CodinGame.Core.csproj src/CodinGame.Core/
-COPY src/CodinGame.Agents/CodinGame.Agents.csproj src/CodinGame.Agents/
-COPY src/CodinGame.Cli/CodinGame.Cli.csproj src/CodinGame.Cli/
-
-RUN dotnet restore CodinGame.sln
-
-# Copie de tout le code source
-COPY . .
-
-# Build de l'AppHost et publication du CLI
-RUN dotnet build src/CodinGame.AppHost/CodinGame.AppHost.csproj -c Release -o /app/apphost
-RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app/cli
-
-# ========================================================
-# Stage 2: Runtime Linux (Ubuntu-based ASP.NET 10)
-# ========================================================
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
-
-# Installation des dépendances et compilateurs pour exécuter les bots CodinGame
+# ---- Exécution ----
+FROM mcr.microsoft.com/dotnet/runtime:10.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ca-certificates \
-    build-essential \
-    python3 \
-    && rm -rf /var/lib/apt/lists/*
+      g++ ca-certificates curl dbus dbus-x11 gnome-keyring libsecret-tools util-linux \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copie des binaires compilés
-COPY --from=build /app/apphost ./apphost
-COPY --from=build /app/cli ./cli
+# Antigravity CLI : script officiel, binaire vérifié par SHA-512, mises à jour automatiques coupées.
+RUN curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh \
+ && bash /tmp/agy-install.sh --dir /usr/local/bin \
+ && rm -rf /tmp/agy-install.sh /root/.cache/antigravity \
+ && agy --version
 
-# Dossier pour les données persistantes (matches.db, replays, logs)
-RUN mkdir -p /app/data
+# L'agent tourne sous son propre utilisateur : il ne peut pas lire le token CodinGame.
+RUN useradd --create-home --uid 1001 agent
 
-# Exposition du port Dashboard Aspire
-EXPOSE 15031
-EXPOSE 19144
-EXPOSE 20290
+COPY --from=referee /out/csbref /usr/local/bin/csbref
+COPY --from=build /app /app
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint
+COPY deploy/login-antigravity.sh /usr/local/bin/login-antigravity
+RUN chmod 755 /usr/local/bin/entrypoint /usr/local/bin/login-antigravity
 
-ENV ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_ENVIRONMENT=Production \
-    ASPIRE_ALLOW_UNSECURED_TRANSPORT=true
+ENV FARM_DATA=/data \
+    FARM_SEED=/app/pipelines \
+    CODINGAME_TOKEN_FILE=/run/secrets/codingame_token \
+    FARM_AGENT_USER=agent \
+    FARM_AGENT_DBUS=unix:path=/run/agent-dbus/bus \
+    AGY_CLI_DISABLE_AUTO_UPDATE=true
 
-# Point d'entrée par défaut : lance l'orchestrateur Aspire
-ENTRYPOINT ["dotnet", "./apphost/CodinGame.AppHost.dll"]
+ENTRYPOINT ["entrypoint"]
+CMD ["servir"]

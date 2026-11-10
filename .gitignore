@@ -503,3 +503,6 @@ id_ecdsa
 id_ed25519
 .npmrc
 .config/codingame/
+
+# Données locales de la ferme (lancement avec l AppHost)
+farm-data/

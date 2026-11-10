@@ -1,0 +1,42 @@
+{
+  "jeu": "mad-pod-racing",
+  "langage": "C++",
+  "ligues": ["Gold", "Legend"],
+  "bot": {
+    "fichier": "Bot.cpp",
+    "compilation": "g++ -std=c++20 -o {sortie} {source} -lm -lpthread"
+  },
+  "agents": {
+    "penseur": { "outil": "agy", "modele": "gemini-3.1-pro-high", "minutes_max": 20 },
+    "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-medium", "minutes_max": 20 },
+    "regard_neuf": { "outil": "agy", "modele": "gemini-3.1-pro-high", "minutes_max": 20 }
+  },
+  "arene": {
+    "arbitre": "csbref",
+    "parallele": 2,
+    "premier_tour_ms": 1000,
+    "tour_ms": 75,
+    "tolerance_temps": 3.0,
+    "parties_min": 20,
+    "parties_max": 600,
+    "elo0": 0,
+    "elo1": 40,
+    "alpha": 0.05,
+    "beta": 0.05
+  },
+  "api": {
+    "parties_confirmation": 4,
+    "adversaire": "boss"
+  },
+  "boucle": {
+    "actif": true,
+    "essais_par_jour": 40,
+    "rejets_avant_regard_neuf": 6,
+    "corrections_compilation_max": 2,
+    "pause_minutes_si_echec_agent": 60,
+    "pause_minutes_si_inactif": 5
+  },
+  "contexte": {
+    "essais_resumes": 15
+  }
+}

@@ -1,18 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <Sdk Name="Aspire.AppHost.Sdk" Version="9.2.0" />
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <UserSecretsId>47dad0ef-3de7-4ef2-8767-735810424643</UserSecretsId>
+    <!-- Lanceur local seulement : les fonctions du paquet CLI d'Aspire ne servent pas ici. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.2.0" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\CodinGame.Cli\CodinGame.Cli.csproj" />

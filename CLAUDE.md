@@ -1,91 +1,81 @@
-# CodinGame Autonomous Agent Farm
+# CodinGame Agent — Pipeline Mad Pod Racing
 
-Ferme multi-agents autonome pour l'expérimentation et l'optimisation de bots CodinGame.
-Pile 100 % .NET 10 : .NET Aspire pour l'orchestration, Microsoft Agent Framework pour les
-agents, eux-mêmes portés par des CLI externes (Claude Code, Antigravity CLI).
+Une boucle automatique qui améliore un bot CodinGame, pour **un seul jeu** : Mad Pod
+Racing. Une IA propose un changement, un programme fait jouer le bot via l'API CodinGame,
+un calcul décide s'il est meilleur, on garde ou on jette, et on recommence.
+
+Pile : .NET 10, une application console, SQLite. Les IA sont des outils en ligne de
+commande (Claude Code, Antigravity CLI) lancés par le programme.
 
 ## À lire avant toute intervention
 
-Le dossier [`.Agent/`](.Agent/) est la mémoire du projet. Commence par
-[`.Agent/README.md`](.Agent/README.md), qui indexe les huit autres documents.
+**[`.Agent/PIPELINE_SPEC.md`](.Agent/PIPELINE_SPEC.md) est la spécification à développer.**
+Elle prime sur tout autre document du dépôt.
 
-Deux comptent plus que les autres :
+[`.Agent/README.md`](.Agent/README.md) indique quels autres documents restent valables.
+La plupart décrivent une conception plus vaste (40 pipelines, 5 rôles, arène locale), mise
+de côté le 2026-11-10 : ne rien construire à partir d'eux.
 
-- [`.Agent/PARAMETERS.md`](.Agent/PARAMETERS.md) — source unique de toute valeur numérique.
-- [`.Agent/DETERMINISTIC_LAYER.md`](.Agent/DETERMINISTIC_LAYER.md) — la couche sans LLM, où vit l'essentiel du code à écrire.
+## Principes
 
-## Règle fondamentale
-
-Si une tâche est déterministe, répétable et facile à spécifier, elle doit être un script,
-pas un appel LLM. Compiler, lancer un match, calculer un Elo, parser des logs, gérer Git :
-du code classique. Le LLM ne dépense des tokens que là où le raisonnement est indispensable —
-comprendre pourquoi une stratégie a échoué, proposer une heuristique, concevoir un changement
-d'architecture, écrire le code du bot.
+- **KISS.** Une pipeline, un jeu, une partie à la fois, des logs console.
+- **DRY.** Ce que CodinGame, Claude Code, Antigravity ou SQLite font déjà n'est pas refait.
+- **Ce qui est déterministe est un programme, pas un appel d'IA.** Lancer une partie, lire
+  un résultat, juger, tenir le journal : du code classique. L'IA ne sert qu'à réfléchir et
+  à écrire le bot.
+- **Une IA ne décide jamais si un bot est meilleur.** Elle propose, le programme mesure.
 
 ## Règles dures
 
-Chacune est là parce que la violer détruit des données ou fausse les mesures.
+Chacune est là parce que la violer détruit des données, fausse les mesures ou expose un secret.
 
-1. **Jamais `git reset --hard`**, sous aucune condition. Une expérience ne vit que sur sa
-   branche `experiment/<id>` ; l'annuler, c'est `git branch -D`, rien d'autre.
-2. **Aucun chiffre en dur hors de `.Agent/PARAMETERS.md`.** Un document ou un composant qui a
-   besoin d'une valeur y renvoie. Les timeouts par tour sont lus dans la configuration du
-   pipeline, jamais écrits comme constante.
-3. **`matches.db` fait foi** pour toute métrique. Ni les messages de commit, ni les noms de
-   tags ne portent de chiffres : un Elo n'a de sens que relativement à un pool, et le pool évolue.
-4. **Agent Framework (`Microsoft.Agents.AI`), pas Semantic Kernel.** `AgentGroupChat`,
-   `TerminationStrategy`, `ChatCompletionAgent` et `KernelPluginFactory` sont archivés — table
-   de correspondance dans `.Agent/ARCHITECTURE.md §2.B`. Les agents sont des **CLI externes**
-   enveloppés en sous-classes d'`AIAgent`, jamais lancés en direct : ils passent par
-   l'`AgentProcessRunner`, qui porte l'affinité CPU et le wall-clock. Et **le code de sortie
-   d'un CLI ne prouve rien** : Antigravity sort en `0` quand il refuse. Voir
-   `.Agent/AGENT_BACKENDS.md`.
-5. **Aucun match ne démarre sans créneau CPU** attribué par l'`ArenaScheduler`. L'isolation
-   n'est pas une optimisation de performance : un tournoi non isolé donne des résultats
-   **faux**, pas lents.
-6. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation et ne
+1. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation et ne
    se committe jamais.** Il vit dans `~/.config/codingame/token`, hors du dépôt, et se lit
-   à chaque appel. Tout accès à l'API passe par le `CodinGameApiGate`, jamais en direct :
-   les quotas sont partagés par tous les pipelines et une seule partie de test est permise
-   à la fois. Jamais de jeu d'arcade. En conteneur, `~` n'est plus celui de l'hôte : le
-   token se **monte** en lecture seule, il ne se met ni dans une image, ni dans un gabarit
-   suivi par git, ni dans une variable d'environnement. Voir `.Agent/CODINGAME_API.md`
-   §2.1.
-7. **Les credentials des CLI d'agents sont des secrets au même titre que le token**, et
-   suivent les mêmes règles — montage, jamais d'image, jamais de gabarit suivi. Un agent
-   tourne dans un répertoire de travail restreint au seul fichier qu'il peut modifier, et
-   les credentials sont hors de sa portée : un agent de code sait lire un fichier et
-   l'afficher.
+   à chaque appel.
+2. **Aucune soumission au classement.** Le code n'en contient aucune. Soumettre peut changer
+   la ligue, donc les règles du jeu. C'est une décision de l'utilisateur, faite à la main.
+3. **Jamais de jeu d'arcade**, et aucune modification du compte CodinGame (code de l'IDE,
+   pseudo).
+4. **Tout accès à CodinGame passe par `CodinGameClient`**, tout appel d'IA par
+   `AgentRunner`. Une seule partie de test à la fois ; les limites se lisent dans les
+   réponses de l'API.
+5. **Aucune valeur en dur dans le code.** Tout réglage, y compris l'outil et le modèle de
+   chaque rôle, vient du `pipeline.json` de la pipeline, relu à chaque essai.
+6. **`matches.db` fait foi** pour tout résultat.
+7. **Le code de sortie d'un outil d'IA ne prouve rien.** La réussite se vérifie sur ce qui
+   a été produit. Un agent travaille dans un dossier qui ne contient que ce qu'il doit
+   lire et le fichier qu'il peut modifier ; les secrets sont hors de sa portée.
+8. **Jamais `git reset --hard`**, sous aucune condition.
 
-Pour les documents : liens relatifs uniquement (la cible inclut Linux), pas de LaTeX
-(le rendu Markdown ne l'interprète pas), chaque fichier daté et doté d'un statut.
+Pour les documents : liens relatifs uniquement, pas de LaTeX, chaque fichier daté et doté
+d'un statut.
 
-## Structure
+## Structure visée
 
 ```
-src/CodinGame.AppHost/         Orchestrateur Aspire + Dashboard
-src/CodinGame.ServiceDefaults/ Télémétrie OpenTelemetry
-src/CodinGame.Core/            Couche déterministe (sans LLM)
-src/CodinGame.Agents/          Les 3 agents (les 2 autres rôles sont des Executor)
-src/CodinGame.Cli/             CLI Spectre.Console
+src/CodinGame.Core/          toute la logique
+src/CodinGame.Cli/           les commandes
+tests/CodinGame.Tests/       les tests
+pipelines/mad-pod-racing/    config, champion, journal de cette pipeline
 ```
 
 ## État réel du code
 
-Avant de supposer quoi que ce soit sur l'état du code, regarde-le. Ce fichier décrit des
-intentions, `.Agent/ROADMAP.md` un avancement déclaré, et seul le contenu de `src/` dit la
-vérité. Relevé le 2026-11-05 :
+Avant de supposer quoi que ce soit sur l'état du code, regarde-le. Relevé le 2026-11-10 :
 
-- **La solution compile** : `dotnet build -c Release`, 0 avertissement, 0 erreur.
-- `CodinGame.Core` porte l'essentiel du travail fait (`Arena/`, `Git/`, `Metrics/`,
-  `ResourceGuard/`, `Storage/`), sans qu'aucun de ces composants soit terminé ni testé.
-- `CodinGame.Cli` a un point d'entrée Spectre.Console qui affiche un tableau de statut
-  **codé en dur** : il ne lit pas l'état réel du système.
-- `AppHost/Program.cs` déclare le projet `CodinGame.Cli` comme ressource. Le Dashboard
-  devrait donc l'afficher — non vérifié.
-- `CodinGame.Agents` est **vide**. Rien de la couche agentique n'existe encore : ni
-  `AgentProcessRunner`, ni les sous-classes d'`AIAgent`, ni le graphe.
-- Quatre décisions ouvertes bloquent des phases : voir le haut de `.Agent/ROADMAP.md`.
+- **Rien de la spécification n'est encore écrit.** Le code présent date de l'ancienne
+  conception.
+- La solution contient cinq projets (`AppHost`, `ServiceDefaults`, `Core`, `Agents`,
+  `Cli`). La spécification en garde deux et ajoute un projet de tests : voir son §5.1.
+- `CodinGame.Core` contient des composants de l'ancienne conception, à supprimer. Le
+  stockage n'y est qu'une suite de « TODO ».
+- `CodinGame.Cli` affiche un tableau de statut **codé en dur**.
+- Il n'existe aucun test.
+- `Dockerfile`, `docker-compose.yml` et `.github/workflows/deploy.yml` servent un
+  déploiement serveur mis de côté. `deploy.yml` contient un `git reset --hard`, qui viole
+  la règle 8.
+- La solution compilait le 2026-11-05 (`dotnet build -c Release`, 0 avertissement) ; non
+  revérifié depuis.
 
 ## Commandes
 
@@ -93,10 +83,4 @@ Compiler la solution :
 
 ```
 dotnet build CodinGame.sln
-```
-
-Lancer l'AppHost et le Dashboard Aspire :
-
-```
-dotnet run --project src/CodinGame.AppHost
 ```

@@ -1,0 +1,34 @@
+# Ferme + dashboard Aspire, sur le VPS. Données et secrets restent sur le VPS, hors image :
+#   /opt/codingame-farm/data            journal, configuration modifiable, essais
+#   /opt/codingame-farm/agent-home      connexion Antigravity (trousseau)
+#   /opt/codingame-farm/secrets/...     token CodinGame, en lecture seule
+# Dashboard : http://localhost:18888 à travers un tunnel SSH (jamais exposé sur Internet).
+name: codingame-farm
+
+services:
+  farm:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: codingame-farm:local
+    restart: unless-stopped
+    command: ["servir"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+      OTEL_SERVICE_NAME: farm
+    volumes:
+      - /opt/codingame-farm/data:/data
+      - /opt/codingame-farm/agent-home:/home/agent
+      - /opt/codingame-farm/secrets/codingame_token:/run/secrets/codingame_token:ro
+    cpus: 3
+    depends_on:
+      - dashboard
+
+  dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
+    restart: unless-stopped
+    environment:
+      Dashboard__Frontend__AuthMode: Unsecured
+      Dashboard__Otlp__AuthMode: Unsecured
+    ports:
+      - "127.0.0.1:18888:18888"

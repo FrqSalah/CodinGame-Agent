@@ -1,55 +1,46 @@
-# CodinGame Autonomous Agent Farm (.Agent Context)
+# Dossier `.Agent` — mémoire du projet
 
-> **Statut** : à jour · **Dernière mise à jour** : 2026-11-05
+> **Statut** : à jour · **Dernière mise à jour** : 2026-11-10
 
-> Ce dossier contient la mémoire collective, les spécifications d'architecture et les analyses stratégiques du projet. Tout agent (humain ou IA) arrivant sur ce projet doit lire ces documents pour comprendre l'état de l'art, les règles opérationnelles et les objectifs du système.
+## Ce que le projet construit
 
----
+Une boucle automatique qui améliore un bot CodinGame, pour **un seul jeu** : Mad Pod Racing.
+Une fois qu'elle tourne, elle sera dupliquée pour d'autres jeux.
 
-## 🎯 Mission
-
-Construire un système multi-agents autonome capable de gérer en continu une ferme de
-**pipelines d'expérimentation et d'optimisation de bots CodinGame**, en répliquant la
-méthodologie qui a permis d'atteindre le **top 1 mondial sur CodinGame** (septembre 2026).
-
-La cible de pipelines provisionnés, la cadence des cycles et les plafonds de ressources
-sont définis dans [PARAMETERS.md](PARAMETERS.md). « Provisionnés » n'est pas « simultanés » :
-le nombre de tournois qui tournent en même temps est plafonné par les créneaux CPU
-disponibles — voir [STRATEGY_ANALYSIS.md §4](STRATEGY_ANALYSIS.md).
+Le projet a été **recadré le 2026-11-10**. La conception précédente visait 40 pipelines,
+5 rôles d'agents et une arène locale ; elle est mise de côté, pas supprimée.
 
 ---
 
-## 🧭 Règle Fondamentale du Projet
+## Documents en vigueur
 
-> **"If a task is deterministic, repeatable and easy to specify, I strongly prefer a script. Launching versions, transforming data, parsing results, preparing statistics and maintaining infrastructure are generally cheaper and more reliable when implemented conventionally. The LLM must spend tokens only on where reasoning actually matters."**
->
-> *(Citation rapportée, source à référencer — voir l'avertissement en tête de
-> [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md).)*
-
-1. **Zéro token gaspillé** sur ce que le code classique sait faire (compiler, exécuter un match, calculer l'Elo, nettoyer les logs, gérer les commits Git).
-2. **Le LLM est réservé au raisonnement** : comprendre pourquoi une stratégie a échoué, proposer une heuristique nouvelle, concevoir un changement d'architecture (par exemple Minimax vers MCTS), ou générer le code du bot.
-
----
-
-## 📚 Sommaire des Fichiers
-
-| Fichier | Description |
+| Fichier | Contenu |
 | :--- | :--- |
-| [PARAMETERS.md](PARAMETERS.md) | **Source unique de toute valeur numérique** : matchs, SPRT, timeouts, cœurs, cadence, budget, rétention. Aucun autre document ne recopie un chiffre. |
-| [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) | Retour d'expérience du n°1 mondial CodinGame : pièges réels évités, économie du projet, et pourquoi 40+ pipelines tiennent sur 16 cœurs. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Choix techniques : 100 % .NET, .NET Aspire, **Microsoft Agent Framework**, Docker. Contient la décision SK → Agent Framework, réexaminée le 2026-11-05 et maintenue. |
-| [AGENT_BACKENDS.md](AGENT_BACKENDS.md) | Les agents sont des **CLI externes** (Claude Code, Antigravity CLI) enveloppés en sous-classes d'`AIAgent` : ce que chaque CLI expose, les pièges qui coûtent, le périmètre d'écriture, le budget, les secrets, et quels rôles gardent un agent. |
-| [CODINGAME_API.md](CODINGAME_API.md) | Intégration de l'API publique CodinGame : token par device flow, **deux arènes aux rôles distincts**, mesure à trois étages, limites externes, règles de conduite, contraintes sur le code du bot, et **critères de choix du jeu témoin** avec le catalogue relevé. |
-| [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md) | Les 5 rôles d'agents (Admin, Utils-Writer, Reviewer, Researcher, Worker/Coder) et les garde-fous de boucle. |
-| [DETERMINISTIC_LAYER.md](DETERMINISTIC_LAYER.md) | Couche non-LLM : ArenaScheduler, MatchRunner, ExperimentStore, OpponentPoolManager, Git, Elo, BudgetGuard, quotas disque. |
-| [ROADMAP.md](ROADMAP.md) | Feuille de route par phase, critères d'acceptation, et décisions encore ouvertes. |
+| [PIPELINE_SPEC.md](PIPELINE_SPEC.md) | **La spécification à développer.** Elle prime sur tout le reste. |
+| [CODINGAME_API.md](CODINGAME_API.md) | Seulement §2 (token), §6 (conduite), §7 (code du bot), §8 (conventions de jeu) et §10 (références). Les §3, §4, §5 et §9 décrivent l'ancienne conception. |
+| [AGENT_BACKENDS.md](AGENT_BACKENDS.md) | Seulement §3 à §5 : ce que Claude Code et Antigravity CLI exposent, et leurs pièges. Le reste suppose Agent Framework, mis de côté. |
+
+## Ancienne conception, mise de côté
+
+Ne rien construire à partir de ces fichiers. Ils restent comme réserve d'idées pour plus
+tard, quand un signal le justifiera (voir [PIPELINE_SPEC.md §14](PIPELINE_SPEC.md)).
+
+| Fichier | Ce qu'il décrivait |
+| :--- | :--- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | .NET Aspire, Microsoft Agent Framework, Docker |
+| [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md) | Cinq rôles d'agents |
+| [DETERMINISTIC_LAYER.md](DETERMINISTIC_LAYER.md) | Arène locale, ordonnanceur de cœurs, pool d'adversaires, Elo |
+| [PARAMETERS.md](PARAMETERS.md) | Les valeurs de cette ancienne conception. Les réglages actuels sont au §8 de la spécification |
+| [ROADMAP.md](ROADMAP.md) | Les phases de l'ancienne conception. L'ordre de livraison actuel est au §12 de la spécification |
+| [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) | Retour d'expérience rapporté, non sourcé |
 
 ---
 
-## ⚠️ Conventions de ce dossier
+## Conventions de ce dossier
 
-1. **Aucun chiffre en dur hors de [PARAMETERS.md](PARAMETERS.md).** Un document qui a besoin d'une valeur y renvoie. Une valeur recopiée ailleurs est un bug de documentation : les deux copies finiront par diverger.
-2. **Liens relatifs uniquement.** Pas de chemin absolu type `file:///c:/...` : le projet est destiné à tourner aussi sur un VPS Linux.
-3. **Chaque fichier porte une date et un statut** en tête, afin qu'un agent puisse juger de sa fraîcheur.
-4. **Pas de LaTeX.** Les formules sont en texte brut ou en bloc de code : le rendu Markdown des outils utilisés ici n'interprète pas `$...$`.
-5. **Une décision non prise se déclare comme telle.** Les points ouverts sont listés en tête de [ROADMAP.md](ROADMAP.md) plutôt que masqués derrière une formulation ambiguë.
+1. **Une seule source par valeur.** Les réglages vivent dans le `pipeline.json` de la
+   pipeline, décrit au §8 de la spécification. Aucun autre document ne les recopie.
+2. **Liens relatifs uniquement.**
+3. **Chaque fichier porte une date et un statut** en tête.
+4. **Pas de LaTeX.** Les formules sont en texte brut ou en bloc de code.
+5. **Une décision non prise se déclare comme telle**, avec son origine.

@@ -1,0 +1,9 @@
+[Unit]
+Description=Vérifie toutes les 2 minutes si une nouvelle version de la ferme est prête
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=2min
+
+[Install]
+WantedBy=timers.target
