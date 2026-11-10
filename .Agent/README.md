@@ -1,6 +1,6 @@
 # Dossier `.Agent` — mémoire du projet
 
-> **Statut** : à jour · **Dernière mise à jour** : 2026-11-10
+> **Statut** : à jour · **Dernière mise à jour** : 2026-11-11
 
 ## Ce que le projet construit
 
@@ -16,9 +16,9 @@ Le projet a été **recadré le 2026-11-10**. La conception précédente visait 
 
 | Fichier | Contenu |
 | :--- | :--- |
-| [PIPELINE_SPEC.md](PIPELINE_SPEC.md) | **La spécification à développer.** Elle prime sur tout le reste. |
+| [PIPELINE_SPEC.md](PIPELINE_SPEC.md) | **Ce qui est construit et déployé**, les décisions et ce qui reste à vérifier. Prime sur tout le reste. |
 | [CODINGAME_API.md](CODINGAME_API.md) | Seulement §2 (token), §6 (conduite), §7 (code du bot), §8 (conventions de jeu) et §10 (références). Les §3, §4, §5 et §9 décrivent l'ancienne conception. |
-| [AGENT_BACKENDS.md](AGENT_BACKENDS.md) | Seulement §3 à §5 : ce que Claude Code et Antigravity CLI exposent, et leurs pièges. Le reste suppose Agent Framework, mis de côté. |
+| [AGENT_BACKENDS.md](AGENT_BACKENDS.md) | Seulement §3 à §5 : ce qu'Antigravity CLI expose et ses pièges. Le reste suppose Agent Framework, mis de côté. |
 
 ## Ancienne conception, mise de côté
 

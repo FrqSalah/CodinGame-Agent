@@ -1,86 +1,66 @@
 # CodinGame Agent — Pipeline Mad Pod Racing
 
-Une boucle automatique qui améliore un bot CodinGame, pour **un seul jeu** : Mad Pod
-Racing. Une IA propose un changement, un programme fait jouer le bot via l'API CodinGame,
-un calcul décide s'il est meilleur, on garde ou on jette, et on recommence.
+Une boucle autonome qui améliore un bot CodinGame (Mad Pod Racing) : Antigravity propose et
+code, un moteur de jeu existant fait jouer candidat et champion, un test statistique tranche,
+CodinGame confirme. Déployée en continu sur un VPS, supervisée par le dashboard Aspire.
 
-Pile : .NET 10, une application console, SQLite. Les IA sont des outils en ligne de
-commande (Claude Code, Antigravity CLI) lancés par le programme.
+Pile : .NET 10, SQLite, Docker, Aspire 13.6. Bot en C++20. Moteur local :
+robostac/coders-strike-back-referee (MIT, Go), figé à un commit dans le `Dockerfile`.
 
 ## À lire avant toute intervention
 
-**[`.Agent/PIPELINE_SPEC.md`](.Agent/PIPELINE_SPEC.md) est la spécification à développer.**
-Elle prime sur tout autre document du dépôt.
-
-[`.Agent/README.md`](.Agent/README.md) indique quels autres documents restent valables.
-La plupart décrivent une conception plus vaste (40 pipelines, 5 rôles, arène locale), mise
-de côté le 2026-11-10 : ne rien construire à partir d'eux.
+**[`.Agent/PIPELINE_SPEC.md`](.Agent/PIPELINE_SPEC.md)** décrit ce qui est construit, les
+décisions et ce qui reste à vérifier. Il prime sur les autres documents de `.Agent/`, dont la
+plupart décrivent une conception plus vaste, mise de côté.
 
 ## Principes
 
-- **KISS.** Une pipeline, un jeu, une partie à la fois, des logs console.
-- **DRY.** Ce que CodinGame, Claude Code, Antigravity ou SQLite font déjà n'est pas refait.
-- **Ce qui est déterministe est un programme, pas un appel d'IA.** Lancer une partie, lire
-  un résultat, juger, tenir le journal : du code classique. L'IA ne sert qu'à réfléchir et
-  à écrire le bot.
-- **Une IA ne décide jamais si un bot est meilleur.** Elle propose, le programme mesure.
+- **KISS, DRY.** Ne rien écrire que CodinGame, Antigravity, le moteur robostac ou SQLite font déjà.
+- **Pas de moteur de jeu écrit par nous** : un moteur existant, au protocole `cg-brutaltester`.
+- **Une IA ne décide jamais si un bot est meilleur.** Elle propose ; le SPRT tranche.
 
 ## Règles dures
 
-Chacune est là parce que la violer détruit des données, fausse les mesures ou expose un secret.
-
-1. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation et ne
-   se committe jamais.** Il vit dans `~/.config/codingame/token`, hors du dépôt, et se lit
-   à chaque appel.
-2. **Aucune soumission au classement.** Le code n'en contient aucune. Soumettre peut changer
-   la ligue, donc les règles du jeu. C'est une décision de l'utilisateur, faite à la main.
-3. **Jamais de jeu d'arcade**, et aucune modification du compte CodinGame (code de l'IDE,
-   pseudo).
-4. **Tout accès à CodinGame passe par `CodinGameClient`**, tout appel d'IA par
-   `AgentRunner`. Une seule partie de test à la fois ; les limites se lisent dans les
-   réponses de l'API.
-5. **Aucune valeur en dur dans le code.** Tout réglage, y compris l'outil et le modèle de
-   chaque rôle, vient du `pipeline.json` de la pipeline, relu à chaque essai.
+1. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation, ne se
+   committe jamais.** Sur le PC : `~/.config/codingame/token`. Sur le VPS :
+   `/opt/codingame-farm/secrets/codingame_token`, root, lecture seule, illisible par l'agent.
+2. **Aucune soumission automatique** au classement : c'est la décision de l'utilisateur.
+3. **Jamais de jeu d'arcade**, aucune modification du compte CodinGame.
+4. **Tout accès à CodinGame passe par `CodinGameClient`**, tout appel d'IA par `AgentRunner`.
+5. **Aucune valeur en dur** : réglages dans `pipeline.json` (relu à chaque essai), limites
+   lues dans les réponses de l'API.
 6. **`matches.db` fait foi** pour tout résultat.
-7. **Le code de sortie d'un outil d'IA ne prouve rien.** La réussite se vérifie sur ce qui
-   a été produit. Un agent travaille dans un dossier qui ne contient que ce qu'il doit
-   lire et le fichier qu'il peut modifier ; les secrets sont hors de sa portée.
-8. **Jamais `git reset --hard`**, sous aucune condition.
+7. **Le code de sortie d'Antigravity ne prouve rien** : il sort en 0 quand il échoue. Lire le
+   statut JSON et vérifier ce qui a été produit. L'agent tourne sous l'utilisateur `agent`,
+   dans un dossier qui ne contient que ce qu'il doit lire et le fichier qu'il peut modifier.
+8. **Jamais `git reset --hard`**, ni dans le code, ni dans le déploiement.
+9. **Pousser sur `main` déploie** sur le VPS (après la CI). Ne pousser que du code testé.
 
-Pour les documents : liens relatifs uniquement, pas de LaTeX, chaque fichier daté et doté
-d'un statut.
+Documents : liens relatifs, pas de LaTeX, chaque fichier daté et doté d'un statut.
 
-## Structure visée
+## Structure
 
 ```
-src/CodinGame.Core/          toute la logique
-src/CodinGame.Cli/           les commandes
-tests/CodinGame.Tests/       les tests
-pipelines/mad-pod-racing/    config, champion, journal de cette pipeline
+src/CodinGame.Core/          logique : config, journal, API, moteur, duel, juge, agents, boucle
+src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel)
+src/CodinGame.ServiceDefaults/ télémétrie OTLP vers le dashboard Aspire
+src/CodinGame.AppHost/       lancement local avec le dashboard Aspire
+tests/CodinGame.Tests/       tests ; les parties réelles tournent dans l'image Docker
+pipelines/mad-pod-racing/    configuration, consignes des agents, bots de départ
+deploy/                      compose, entrée du conteneur, timer de déploiement du VPS
 ```
 
-## État réel du code
+## État réel (relevé le 2026-11-11)
 
-Avant de supposer quoi que ce soit sur l'état du code, regarde-le. Relevé le 2026-11-10 :
-
-- **Rien de la spécification n'est encore écrit.** Le code présent date de l'ancienne
-  conception.
-- La solution contient cinq projets (`AppHost`, `ServiceDefaults`, `Core`, `Agents`,
-  `Cli`). La spécification en garde deux et ajoute un projet de tests : voir son §5.1.
-- `CodinGame.Core` contient des composants de l'ancienne conception, à supprimer. Le
-  stockage n'y est qu'une suite de « TODO ».
-- `CodinGame.Cli` affiche un tableau de statut **codé en dur**.
-- Il n'existe aucun test.
-- `Dockerfile`, `docker-compose.yml` et `.github/workflows/deploy.yml` servent un
-  déploiement serveur mis de côté. `deploy.yml` contient un `git reset --hard`, qui viole
-  la règle 8.
-- La solution compilait le 2026-11-05 (`dotnet build -c Release`, 0 avertissement) ; non
-  revérifié depuis.
+- Déployé et en marche sur le VPS ; 14 tests verts dans l'image, dont 3 parties réelles.
+- La ferme est **en pause** : le compte est en Silver, le moteur ne couvre que Gold et Legend.
+- Antigravity n'est **pas encore connecté** : connexion interactive à faire par l'utilisateur.
+- Aucun essai complet n'a encore tourné.
 
 ## Commandes
 
-Compiler la solution :
-
 ```
 dotnet build CodinGame.sln
+dotnet test --solution CodinGame.sln
+dotnet run --project src/CodinGame.AppHost
 ```
