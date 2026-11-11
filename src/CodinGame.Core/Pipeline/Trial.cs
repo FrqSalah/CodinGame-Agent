@@ -29,6 +29,12 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 {
     private const string Instruction = "Lis le fichier TACHE.md de ce dossier et suis ses instructions à la lettre.";
 
+    /// <summary>
+    /// Taille maximale d'une consigne passée en argument. Linux refuse un argument de plus de
+    /// 128 Kio : au-delà de cette marge, l'agent lit ses fichiers lui-même, comme avant.
+    /// </summary>
+    private const int MaxInlinePromptBytes = 120_000;
+
     /// <param name="rejudge">
     /// Numéro d'un essai dont le candidat est rejugé tel quel (duel, confirmation, promotion),
     /// sans repasser par le penseur ni le codeur. Le rejugement est un nouvel essai du journal.
@@ -87,14 +93,14 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         // 1. Penseur : une idée, écrite avant tout code.
         var thinkDir = Path.Combine(dir, "penseur");
-        await WriteWorkspaceAsync(thinkDir, "penseur", ct,
+        var thinkPrompt = await WriteWorkspaceAsync(thinkDir, "penseur", ct,
             ("REGLES.md", rules),
             ("MOTEUR.md", engine),
             (botFile, championSource),
             ("HISTORIQUE.md", History(cfg.Contexte.EssaisResumes)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, Instruction), ct);
+        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt), ct);
         if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
         {
             return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
@@ -108,13 +114,12 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         // 2. Codeur : applique la note, et rien d'autre.
         var codeDir = Path.Combine(dir, "codeur");
-        await WriteWorkspaceAsync(codeDir, "codeur", ct,
+        var codePrompt = await WriteWorkspaceAsync(codeDir, "codeur", ct,
             ("NOTE.md", note),
-            ("REGLES.md", rules),
             ("MOTEUR.md", engine),
             (botFile, championSource));
-        var code = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, Instruction), ct);
-        journal.AddTrialTokens(id, code.Tokens);
+        var code = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, codePrompt), ct);
+        journal.AddTrialTokens(id, "codeur", code.Tokens);
         var candidate = ReadOrEmpty(Path.Combine(codeDir, botFile));
         if (!code.Success)
         {
@@ -133,11 +138,13 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         {
             corrections++;
             log.LogInformation("Essai {Essai} : erreur de compilation, correction {N}", id, corrections);
-            await File.WriteAllTextAsync(Path.Combine(codeDir, "ERREURS.md"), "```\n" + Clip(build.Errors, 6000) + "\n```\n", ct);
-            await agents.GrantAsync(codeDir, ct);
-            var fix = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir,
-                $"Lis TACHE.md puis ERREURS.md : {botFile} ne compile pas. Corrige-le sans changer l'idée de NOTE.md."), ct);
-            journal.AddTrialTokens(id, fix.Tokens);
+            var fixPrompt = await WriteWorkspaceAsync(codeDir, "codeur", ct,
+                ("NOTE.md", note),
+                ("MOTEUR.md", engine),
+                (botFile, candidate),
+                ("ERREURS.md", Clip(build.Errors, 6000)));
+            var fix = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, fixPrompt), ct);
+            journal.AddTrialTokens(id, "codeur", fix.Tokens);
             candidate = ReadOrEmpty(Path.Combine(codeDir, botFile));
             build = await ctx.Builder.BuildAsync(candidate, ct);
         }
@@ -292,14 +299,14 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         var cfg = ctx.Config;
         log.LogInformation("Essai {Essai} : {N} essais sans promotion, appel du regard neuf", id, cfg.Boucle.RejetsAvantRegardNeuf);
         var lookDir = Path.Combine(dir, "regard-neuf");
-        await WriteWorkspaceAsync(lookDir, "regard_neuf", ct,
+        var lookPrompt = await WriteWorkspaceAsync(lookDir, "regard_neuf", ct,
             ("REGLES.md", ReadOrEmpty(ctx.Paths.Rules)),
             ("MOTEUR.md", ReadOrEmpty(ctx.Paths.EngineNotes)),
             (cfg.Bot.Fichier, championSource),
             ("HISTORIQUE.md", History(int.MaxValue)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION_PRECEDENTE.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, Instruction), ct);
+        var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, lookPrompt), ct);
         if (look.Success && !string.IsNullOrWhiteSpace(look.Response))
         {
             await File.WriteAllTextAsync(ctx.Paths.Orientation, look.Response.Trim(), ct);
@@ -319,14 +326,14 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     private async Task<AgentResult> AskAsync(long id, AgentRequest request, CancellationToken ct)
     {
         var result = await agents.RunAsync(request, ct);
-        ctx.Journal.AddTrialTokens(id, result.Tokens);
+        ctx.Journal.AddTrialTokens(id, request.Role, result.Tokens);
         for (var retry = 0; retry < ctx.Config.Boucle.RelancesReponseVide
              && result.Success && string.IsNullOrWhiteSpace(result.Response); retry++)
         {
             log.LogWarning("Essai {Essai} : réponse vide du {Role}, relance {N} — sortie de l'outil : {Diagnostic}",
                 id, request.Role, retry + 1, result.Diagnostic);
             result = await agents.RunAsync(request, ct);
-            ctx.Journal.AddTrialTokens(id, result.Tokens);
+            ctx.Journal.AddTrialTokens(id, request.Role, result.Tokens);
         }
 
         if (result.Success && string.IsNullOrWhiteSpace(result.Response))
@@ -337,7 +344,13 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return result;
     }
 
-    private async Task WriteWorkspaceAsync(string dir, string role, CancellationToken ct, params (string Name, string Content)[] files)
+    /// <summary>
+    /// Prépare le dossier de l'agent et renvoie sa consigne. Les documents sont recopiés dans la
+    /// consigne elle-même : chaque lecture de fichier par l'agent renverrait tout le contexte au
+    /// modèle, et une lecture hors du dossier ferait échouer le run. Les fichiers restent écrits
+    /// dans le dossier, pour l'audit et pour les consignes trop longues.
+    /// </summary>
+    private async Task<string> WriteWorkspaceAsync(string dir, string role, CancellationToken ct, params (string Name, string Content)[] files)
     {
         Directory.CreateDirectory(dir);
         var task = ctx.Fill(await File.ReadAllTextAsync(ctx.Paths.Prompt(role), ct));
@@ -351,6 +364,23 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         }
 
         await agents.GrantAsync(dir, ct);
+
+        var prompt = new StringBuilder(task)
+            .Append("\n\n---\n\n# Documents\n\nTous les documents utiles sont ci-dessous. Ne lis aucun fichier : ")
+            .Append("le seul fichier à toucher, s'il y en a un, est celui que ta tâche te demande d'écrire.\n\n");
+        foreach (var (name, content) in files.Where(f => !string.IsNullOrWhiteSpace(f.Content)))
+        {
+            prompt.Append("## ").Append(name).Append("\n\n````\n").Append(content.TrimEnd()).Append("\n````\n\n");
+        }
+
+        var inline = prompt.ToString();
+        if (Encoding.UTF8.GetByteCount(inline) <= MaxInlinePromptBytes)
+        {
+            return inline;
+        }
+
+        log.LogWarning("Consigne du {Role} trop longue pour être passée directement : l'agent lira ses fichiers", role);
+        return Instruction;
     }
 
     /// <summary>Résumé du journal donné aux agents : les derniers essais, puis toutes les idées déjà jetées.</summary>
@@ -372,7 +402,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                 $"| {t.Id} | {t.Verdict} | {Cell(t.Idea)} | {t.Wins} V / {t.Losses} D | {Cell(t.Reason)} |\n");
         }
 
-        var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not null && t.Idea is not null).ToList();
+        var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not null && t.Idea is not null)
+            .TakeLast(ctx.Config.Contexte.IdeesRejetees).ToList();
         if (rejected.Count > 0)
         {
             sb.Append("\n## Idées déjà essayées sans succès\n\n");

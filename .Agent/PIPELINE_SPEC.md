@@ -129,6 +129,14 @@ Corrigé le jour même :
 - `bilan` et `verifier` marquaient l'essai en cours comme interrompu : seule la boucle clôt
   désormais les essais restés ouverts.
 
+Coût en tokens (2026-11-11, en soirée) : un essai coûtait en général 200 000 à 270 000 tokens,
+surtout par le coût fixe d'Antigravity (environ 43 000 par appel) et par les allers-retours
+de l'agent, qui renvoient tout le contexte à chaque lecture ou retouche. Désormais, les
+documents sont recopiés dans la consigne (plus de lectures), le codeur réécrit le bot en une
+seule fois avec la note, le moteur et le bot seulement, et la liste des idées rejetées est
+bornée (`contexte.idees_rejetees`). Le journal garde les tokens par rôle ; `farm bilan` en
+affiche la moyenne. Effet à mesurer sur une dizaine d'essais.
+
 Toujours non vérifié :
 
 - Ce que renvoie Antigravity quand le quota de l'abonnement est épuisé.

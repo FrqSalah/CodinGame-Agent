@@ -3,7 +3,7 @@
 Tu es le stratège d'une boucle qui améliore un bot pour le jeu CodinGame « {jeu} »
 (ligue {ligue}), écrit en {langage} dans le fichier {fichier}.
 
-## Ce que contient ce dossier
+## Ce que tu reçois (documents à la fin de cette consigne)
 
 - REGLES.md : l'énoncé officiel du jeu.
 - MOTEUR.md : la physique du moteur, tour par tour.

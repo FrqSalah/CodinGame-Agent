@@ -39,6 +39,7 @@
     "pause_minutes_si_inactif": 5
   },
   "contexte": {
-    "essais_resumes": 15
+    "essais_resumes": 15,
+    "idees_rejetees": 60
   }
 }

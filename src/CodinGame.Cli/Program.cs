@@ -143,6 +143,12 @@ int Report()
             Console.WriteLine($"  {group.Key,-12} {group.Count()}");
         }
 
+        var tokens = journal.TokenAverages(10);
+        if (tokens.Trials > 0)
+        {
+            Console.WriteLine($"  tokens moyens sur les {tokens.Trials} derniers essais mesurés : penseur {tokens.Penseur:N0}, codeur {tokens.Codeur:N0}, regard neuf {tokens.RegardNeuf:N0}, total {tokens.Total:N0}");
+        }
+
         Console.WriteLine();
         foreach (var t in trials.TakeLast(15).Reverse())
         {

@@ -46,7 +46,22 @@ public sealed class Journal : IDisposable
             CREATE TABLE IF NOT EXISTS orientations (
                 id INTEGER PRIMARY KEY, essai_id INTEGER, texte TEXT NOT NULL, cree_le TEXT NOT NULL);
             """);
+
+        // Colonnes ajoutées après la mise en service : ajoutées aux journaux existants.
+        var columns = Query("PRAGMA table_info(essais)", r => r.GetString(1));
+        foreach (var role in TokenRoles.Values.Where(c => !columns.Contains(c)))
+        {
+            Exec($"ALTER TABLE essais ADD COLUMN {role} INTEGER NOT NULL DEFAULT 0");
+        }
     }
+
+    /// <summary>Colonne de consommation de chaque rôle d'agent.</summary>
+    private static readonly Dictionary<string, string> TokenRoles = new()
+    {
+        ["penseur"] = "tokens_penseur",
+        ["codeur"] = "tokens_codeur",
+        ["regard_neuf"] = "tokens_regard_neuf",
+    };
 
     public static string Now() => DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 
@@ -85,8 +100,19 @@ public sealed class Journal : IDisposable
     public void SetTrialCandidate(long id, string hash, int corrections) =>
         Exec("UPDATE essais SET candidat_hash = $h, corrections = $c WHERE id = $id", ("$h", hash), ("$c", corrections), ("$id", id));
 
-    public void AddTrialTokens(long id, long tokens) =>
-        Exec("UPDATE essais SET tokens = tokens + $t WHERE id = $id", ("$t", tokens), ("$id", id));
+    public void AddTrialTokens(long id, string role, long tokens) =>
+        Exec($"UPDATE essais SET tokens = tokens + $t, {TokenRoles[role]} = {TokenRoles[role]} + $t WHERE id = $id",
+            ("$t", tokens), ("$id", id));
+
+    /// <summary>Consommation moyenne par rôle sur les derniers essais mesurés par rôle.</summary>
+    public (int Trials, double Penseur, double Codeur, double RegardNeuf, double Total) TokenAverages(int last) =>
+        Query("""
+            SELECT COUNT(*), AVG(tokens_penseur), AVG(tokens_codeur), AVG(tokens_regard_neuf), AVG(tokens) FROM (
+                SELECT * FROM essais WHERE fin IS NOT NULL AND tokens_penseur + tokens_codeur + tokens_regard_neuf > 0
+                ORDER BY id DESC LIMIT $n)
+            """, r => (r.GetInt32(0), D(r, 1), D(r, 2), D(r, 3), D(r, 4)), ("$n", last)).First();
+
+    private static double D(SqliteDataReader r, int i) => r.IsDBNull(i) ? 0 : r.GetDouble(i);
 
     public void FinishTrial(long id, string verdict, string reason, int wins, int losses, int draws, double? llr) =>
         Exec("""
