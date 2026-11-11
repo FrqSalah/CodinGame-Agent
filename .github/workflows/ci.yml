@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v7
       # L'image compile la solution et joue les tests, parties réelles avec le moteur comprises.
       - name: Image Docker (compilation + tests)
-        run: docker build -t codingame-farm:ci .
+        run: docker build --network host -t codingame-farm:ci .
 
   deploy:
     name: Publier pour le VPS
