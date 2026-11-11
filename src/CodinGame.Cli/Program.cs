@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 //   verifier [pipeline]    contrôle des prérequis, sans rien dépenser d'autre qu'une lecture d'API
 //   bilan [pipeline]       résumé du journal
 //   duel <a> <b> [n]       duel local entre deux sources de bot, avec le moteur de la pipeline
+//   rejuger <essai>        rejuge le candidat d'un essai passé (duel, confirmation, promotion)
 
 var command = args.FirstOrDefault() ?? "servir";
 var rest = args.Skip(1).ToArray();
@@ -52,6 +53,7 @@ try
         "verifier" => await Check(),
         "bilan" => Report(),
         "duel" => await LocalDuel(),
+        "rejuger" when rest.Length > 0 => (await farm.RejudgeAsync(paths.PipelineNames().First(), long.Parse(rest[0], CultureInfo.InvariantCulture), ct)).Verdict == Verdicts.Kept ? 0 : 2,
         _ => Usage(),
     };
 }
@@ -184,6 +186,6 @@ static string Clip(string? s, int max) => s is null ? "" : s.Length <= max ? s :
 
 static int Usage()
 {
-    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n]]");
+    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai>]");
     return 64;
 }

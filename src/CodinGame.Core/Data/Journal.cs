@@ -78,6 +78,10 @@ public sealed class Journal : IDisposable
     public void SetTrialNote(long id, string idea, string note) =>
         Exec("UPDATE essais SET idee = $i, note = $n WHERE id = $id", ("$i", idea), ("$n", note), ("$id", id));
 
+    public (string? Hash, string? Idea, string? Note) TrialCandidate(long id) =>
+        Query("SELECT candidat_hash, idee, note FROM essais WHERE id = $id",
+            r => (Str(r, 0), Str(r, 1), Str(r, 2)), ("$id", id)).FirstOrDefault();
+
     public void SetTrialCandidate(long id, string hash, int corrections) =>
         Exec("UPDATE essais SET candidat_hash = $h, corrections = $c WHERE id = $id", ("$h", hash), ("$c", corrections), ("$id", id));
 

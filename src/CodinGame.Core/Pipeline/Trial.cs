@@ -29,7 +29,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 {
     private const string Instruction = "Lis le fichier TACHE.md de ce dossier et suis ses instructions à la lettre.";
 
-    public async Task<TrialVerdict> RunAsync(CancellationToken ct)
+    /// <param name="rejudge">
+    /// Numéro d'un essai dont le candidat est rejugé tel quel (duel, confirmation, promotion),
+    /// sans repasser par le penseur ni le codeur. Le rejugement est un nouvel essai du journal.
+    /// </param>
+    public async Task<TrialVerdict> RunAsync(CancellationToken ct, long? rejudge = null)
     {
         var cfg = ctx.Config;
         var journal = ctx.Journal;
@@ -49,7 +53,9 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         DuelOutcome? duel = null;
         try
         {
-            (verdict, duel) = await RunStepsAsync(id, dir, championHash, championSource, ct);
+            (verdict, duel) = rejudge is { } of
+                ? await RejudgeStepsAsync(id, of, championHash, championSource, ct)
+                : await RunStepsAsync(id, dir, championHash, championSource, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -62,7 +68,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         activity?.SetTag("verdict", verdict.Verdict);
         log.LogInformation("Essai {Essai} : {Verdict} — {Raison}", id, verdict.Verdict, verdict.Reason);
 
-        if (verdict.Verdict != Verdicts.Kept && journal.NonKeptSinceLastChange() >= cfg.Boucle.RejetsAvantRegardNeuf)
+        if (rejudge is null && verdict.Verdict != Verdicts.Kept && journal.NonKeptSinceLastChange() >= cfg.Boucle.RejetsAvantRegardNeuf)
         {
             await FreshLookAsync(id, dir, championSource, ct);
         }
@@ -145,6 +151,46 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
         }
 
+        return await JudgeAsync(id, hash, candidate, build.Executable!, championHash, championSource, ct);
+    }
+
+    /// <summary>Rejuge le candidat d'un essai passé contre le champion actuel.</summary>
+    private async Task<(TrialVerdict, DuelOutcome?)> RejudgeStepsAsync(
+        long id, long of, string championHash, string championSource, CancellationToken ct)
+    {
+        var journal = ctx.Journal;
+        var (hash, idea, note) = journal.TrialCandidate(of);
+        var candidate = hash is null ? null : journal.BotSource(hash);
+        if (candidate is null)
+        {
+            throw new InvalidOperationException($"L'essai {of} n'a pas de candidat dans le journal.");
+        }
+
+        journal.SetTrialNote(id, $"Rejugement de l'essai {of} : {idea}", note ?? "");
+        journal.SetTrialCandidate(id, hash!, 0);
+        log.LogInformation("Essai {Essai} : rejugement du candidat {Hash} de l'essai {Of}", id, hash, of);
+        if (hash == championHash)
+        {
+            return (new TrialVerdict(Verdicts.Rejected, "ce candidat est déjà le champion"), null);
+        }
+
+        var build = await ctx.Builder.BuildAsync(candidate, ct);
+        return build.Success
+            ? await JudgeAsync(id, hash!, candidate, build.Executable!, championHash, championSource, ct)
+            : (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
+    }
+
+    /// <summary>
+    /// Duel local jusqu'au verdict du test séquentiel, confirmation sur CodinGame, puis promotion
+    /// et soumission. Seul ce calcul décide si un candidat devient champion.
+    /// </summary>
+    private async Task<(TrialVerdict, DuelOutcome?)> JudgeAsync(
+        long id, string hash, string candidate, string candidateExe, string championHash, string championSource, CancellationToken ct)
+    {
+        var cfg = ctx.Config;
+        var journal = ctx.Journal;
+        var botFile = cfg.Bot.Fichier;
+
         // 4. Duel dans le simulateur, jusqu'à ce que le test séquentiel tranche.
         var championBuild = await ctx.Builder.BuildAsync(championSource, ct);
         if (!championBuild.Success)
@@ -155,7 +201,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         DuelOutcome duel;
         using (Telemetry.Source.StartActivity("duel"))
         {
-            duel = await new Duel(ctx.Referee, cfg.Arene, log).RunAsync(build.Executable!, championBuild.Executable!,
+            duel = await new Duel(ctx.Referee, cfg.Arene, log).RunAsync(candidateExe, championBuild.Executable!,
                 (seed, seat, r) => journal.AddLocalGame(id, seed, seat, ResultFor(r, seat),
                     r.Faults[seat] == FaultKind.None ? null : r.Detail),
                 ct);

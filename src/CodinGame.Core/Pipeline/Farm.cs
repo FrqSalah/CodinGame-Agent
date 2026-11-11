@@ -134,6 +134,16 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
     }
 
+    /// <summary>Rejuge le candidat d'un essai passé, sans clore l'essai que la boucle mène peut-être en parallèle.</summary>
+    public async Task<TrialVerdict> RejudgeAsync(string name, long trialId, CancellationToken ct)
+    {
+        var (ctx, journal) = Open(name);
+        using (journal)
+        {
+            return await new Trial(ctx, api, agents, log).RunAsync(ct, trialId);
+        }
+    }
+
     /// <summary>
     /// Ouvre la configuration et le journal d'une pipeline. Seule la boucle clôt les essais restés
     /// ouverts : une commande de consultation (bilan, vérification) lancée pendant un essai ne doit
