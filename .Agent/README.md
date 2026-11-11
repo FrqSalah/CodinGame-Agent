@@ -30,7 +30,7 @@ tard, quand un signal le justifiera.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | .NET Aspire, Microsoft Agent Framework, Docker |
 | [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md) | Cinq rôles d'agents |
 | [DETERMINISTIC_LAYER.md](DETERMINISTIC_LAYER.md) | Arène locale, ordonnanceur de cœurs, pool d'adversaires, Elo |
-| [PARAMETERS.md](PARAMETERS.md) | Les valeurs de cette ancienne conception. Les réglages actuels sont au §8 de la spécification |
+| [PARAMETERS.md](PARAMETERS.md) | Les valeurs de cette ancienne conception. Les réglages actuels sont dans `pipeline.json` (§5 de la spécification) |
 | [ROADMAP.md](ROADMAP.md) | Les phases de l'ancienne conception. Les résultats et points ouverts sont au §8 de la spécification |
 | [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) | Retour d'expérience rapporté, non sourcé |
 
@@ -39,7 +39,7 @@ tard, quand un signal le justifiera.
 ## Conventions de ce dossier
 
 1. **Une seule source par valeur.** Les réglages vivent dans le `pipeline.json` de la
-   pipeline, décrit au §8 de la spécification. Aucun autre document ne les recopie.
+   pipeline, décrit au §5 de la spécification. Aucun autre document ne les recopie.
 2. **Liens relatifs uniquement.**
 3. **Chaque fichier porte une date et un statut** en tête.
 4. **Pas de LaTeX.** Les formules sont en texte brut ou en bloc de code.
