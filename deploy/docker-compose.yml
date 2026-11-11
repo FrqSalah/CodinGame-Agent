@@ -3,6 +3,7 @@
 #   /opt/codingame-farm/agent-home      connexion Antigravity (trousseau)
 #   /opt/codingame-farm/secrets/...     token CodinGame, en lecture seule
 # Dashboard : http://localhost:18888 à travers un tunnel SSH (jamais exposé sur Internet).
+# Ressources visibles : « farm » (essais, journaux, métriques) et « vps » (état de la machine).
 name: codingame-farm
 
 services:
@@ -21,6 +22,18 @@ services:
       - /opt/codingame-farm/agent-home:/home/agent
       - /opt/codingame-farm/secrets/codingame_token:/run/secrets/codingame_token:ro
     cpus: 3
+    depends_on:
+      - dashboard
+
+  # État du VPS dans le dashboard (ressource « vps ») : collecteur OpenTelemetry officiel.
+  vps:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - /:/hostfs:ro
+    cpus: 0.25
     depends_on:
       - dashboard
 

@@ -1,0 +1,49 @@
+# État du VPS (processeur, charge, mémoire, disques), envoyé au dashboard Aspire.
+# Le collecteur lit le système de la machine, monté en lecture seule sur /hostfs.
+receivers:
+  host_metrics:
+    root_path: /hostfs
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      load:
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      paging:
+      disk:
+      filesystem:
+        exclude_fs_types:
+          fs_types: [autofs, binfmt_misc, cgroup2, configfs, debugfs, devpts, devtmpfs, fusectl, hugetlbfs, mqueue, nsfs, overlay, proc, pstore, securityfs, squashfs, sysfs, tmpfs, tracefs]
+          match_type: strict
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: vps
+        action: upsert
+  batch:
+
+exporters:
+  otlp_grpc:
+    endpoint: dashboard:18889
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [host_metrics]
+      processors: [resource, batch]
+      exporters: [otlp_grpc]
+  telemetry:
+    logs:
+      level: warn

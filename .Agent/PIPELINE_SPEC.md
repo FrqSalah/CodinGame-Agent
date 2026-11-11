@@ -87,7 +87,9 @@ déposé là remplace le gabarit livré.
   parties réelles avec le moteur comprises. Si tout passe, avance la branche `deploy`.
 - **VPS** : un timer systemd (`codingame-farm-update.timer`) vérifie `deploy` toutes les
   2 minutes et reconstruit si elle a bougé. Aucun secret n'est stocké sur GitHub.
-- **Conteneurs** (`deploy/docker-compose.yml`) : `farm` et `dashboard` (Aspire 13.6).
+- **Conteneurs** (`deploy/docker-compose.yml`) : `farm`, `dashboard` (Aspire 13.6) et `vps`,
+  un collecteur OpenTelemetry officiel qui envoie au dashboard l'état de la machine (processeur,
+  charge, mémoire, disques), toutes les 30 secondes.
 - **Secrets** : token CodinGame en lecture seule, propriété de root, illisible par
   l'utilisateur `agent` (vérifié) ; connexion Antigravity dans le trousseau de `agent`,
   monté depuis le VPS. Rien dans l'image, rien dans le dépôt.
@@ -96,6 +98,7 @@ déposé là remplace le gabarit livré.
 
 ```
 # Dashboard (depuis le PC) puis ouvrir http://localhost:18888
+# Ressources : « farm » (essais, journaux, métriques farm.*) et « vps » (métriques system.*)
 ssh -L 18888:127.0.0.1:18888 ovh-vps
 
 # Connexion Antigravity, une seule fois
