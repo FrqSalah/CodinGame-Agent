@@ -277,9 +277,15 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         for (var retry = 0; retry < ctx.Config.Boucle.RelancesReponseVide
              && result.Success && string.IsNullOrWhiteSpace(result.Response); retry++)
         {
-            log.LogWarning("Essai {Essai} : réponse vide du {Role}, relance {N}", id, request.Role, retry + 1);
+            log.LogWarning("Essai {Essai} : réponse vide du {Role}, relance {N} — sortie de l'outil : {Diagnostic}",
+                id, request.Role, retry + 1, result.Diagnostic);
             result = await agents.RunAsync(request, ct);
             ctx.Journal.AddTrialTokens(id, result.Tokens);
+        }
+
+        if (result.Success && string.IsNullOrWhiteSpace(result.Response))
+        {
+            log.LogWarning("Essai {Essai} : réponse encore vide du {Role} — sortie de l'outil : {Diagnostic}", id, request.Role, result.Diagnostic);
         }
 
         return result;

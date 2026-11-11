@@ -10,7 +10,8 @@ namespace CodinGame.Core.Agents;
 
 public sealed record AgentRequest(string Role, AgentRole Settings, string WorkDirectory, string Prompt);
 
-public sealed record AgentResult(bool Success, string Response, string? Error, double Seconds, long Tokens);
+/// <param name="Diagnostic">Sortie technique de l'outil sans le texte de la réponse (statut, tokens, raison de fin).</param>
+public sealed record AgentResult(bool Success, string Response, string? Error, double Seconds, long Tokens, string Diagnostic = "");
 
 public enum AgentAvailability
 {
@@ -94,7 +95,9 @@ public sealed partial class AntigravityRunner(ILogger<AntigravityRunner> log) : 
             log.LogDebug("Antigravity ({Role}) a écrit sur sa sortie d'erreur : {Stderr}", request.Role, Tail(stderr));
         }
 
-        return new AgentResult(true, response, null, seconds, tokens);
+        var diagnostic = (JsonObject)envelope.DeepClone();
+        diagnostic.Remove("response");
+        return new AgentResult(true, response, null, seconds, tokens, diagnostic.ToJsonString() + (string.IsNullOrWhiteSpace(stderr) ? "" : $" stderr: {Tail(stderr)}"));
     }
 
     public async Task<AgentStatus> CheckAsync(CancellationToken ct)
