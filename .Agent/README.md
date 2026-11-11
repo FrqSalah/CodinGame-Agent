@@ -23,7 +23,7 @@ Le projet a été **recadré le 2026-11-10**. La conception précédente visait 
 ## Ancienne conception, mise de côté
 
 Ne rien construire à partir de ces fichiers. Ils restent comme réserve d'idées pour plus
-tard, quand un signal le justifiera (voir [PIPELINE_SPEC.md §14](PIPELINE_SPEC.md)).
+tard, quand un signal le justifiera.
 
 | Fichier | Ce qu'il décrivait |
 | :--- | :--- |
@@ -31,7 +31,7 @@ tard, quand un signal le justifiera (voir [PIPELINE_SPEC.md §14](PIPELINE_SPEC.
 | [MULTI_AGENT_SPEC.md](MULTI_AGENT_SPEC.md) | Cinq rôles d'agents |
 | [DETERMINISTIC_LAYER.md](DETERMINISTIC_LAYER.md) | Arène locale, ordonnanceur de cœurs, pool d'adversaires, Elo |
 | [PARAMETERS.md](PARAMETERS.md) | Les valeurs de cette ancienne conception. Les réglages actuels sont au §8 de la spécification |
-| [ROADMAP.md](ROADMAP.md) | Les phases de l'ancienne conception. L'ordre de livraison actuel est au §12 de la spécification |
+| [ROADMAP.md](ROADMAP.md) | Les phases de l'ancienne conception. Les résultats et points ouverts sont au §8 de la spécification |
 | [STRATEGY_ANALYSIS.md](STRATEGY_ANALYSIS.md) | Retour d'expérience rapporté, non sourcé |
 
 ---

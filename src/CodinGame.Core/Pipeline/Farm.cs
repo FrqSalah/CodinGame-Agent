@@ -68,7 +68,7 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
     /// <summary>Prépare la pipeline puis lance un essai. Renvoie false si rien n'a pu tourner.</summary>
     public async Task<bool> RunOnceAsync(string name, CancellationToken ct)
     {
-        var (ctx, journal) = Open(name);
+        var (ctx, journal) = Open(name, closeInterrupted: true);
         using (journal)
         {
             var cfg = ctx.Config;
@@ -134,8 +134,12 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
     }
 
-    /// <summary>Ouvre la configuration et le journal d'une pipeline.</summary>
-    public (PipelineContext Context, Journal Journal) Open(string name)
+    /// <summary>
+    /// Ouvre la configuration et le journal d'une pipeline. Seule la boucle clôt les essais restés
+    /// ouverts : une commande de consultation (bilan, vérification) lancée pendant un essai ne doit
+    /// pas le marquer interrompu.
+    /// </summary>
+    public (PipelineContext Context, Journal Journal) Open(string name, bool closeInterrupted = false)
     {
         var p = paths.Pipeline(name);
         var notes = new List<string>();
@@ -146,7 +150,7 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
 
         var journal = new Journal(p.Journal);
-        var closed = journal.CloseInterruptedTrials();
+        var closed = closeInterrupted ? journal.CloseInterruptedTrials() : 0;
         if (closed > 0)
         {
             log.LogWarning("Pipeline {Pipeline} : {N} essai(s) interrompu(s) clos", name, closed);

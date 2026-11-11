@@ -1,6 +1,6 @@
 # Pipeline Mad Pod Racing — conception et état
 
-> **Statut** : déployée sur le VPS · **Dernière mise à jour** : 2026-11-11
+> **Statut** : en production sur le VPS · **Dernière mise à jour** : 2026-11-11
 > Ce document décrit ce qui est construit. Il prime sur tout autre fichier de `.Agent/`.
 
 ## 1. Ce que fait la pipeline
@@ -8,9 +8,9 @@
 Une boucle autonome qui améliore un bot CodinGame, pour un seul jeu : Mad Pod Racing.
 
 ```
- PENSEUR (Antigravity, modèle fort) ── note : une idée, quoi changer, pourquoi
+ PENSEUR (Antigravity, Gemini)      ── note : une idée, quoi changer, pourquoi
      │
- CODEUR  (Antigravity, modèle léger) ── applique la note au bot C++
+ CODEUR  (Antigravity, Gemini)      ── applique la note au bot C++
      │
  COMPILATION (g++, C++20) ── jusqu'à 2 retours au codeur en cas d'erreur
      │
@@ -18,7 +18,7 @@ Une boucle autonome qui améliore un bot CodinGame, pour un seul jeu : Mad Pod R
      │
  CONFIRMATION ── parties de test sur CodinGame, mêmes circuits que le champion
      │
- VERDICT ── GARDE (nouveau champion) ou JETE / FAUTE / NON_COMPILE / ECHEC_AGENT
+ VERDICT ── GARDE (nouveau champion, soumis au classement) ou JETE / FAUTE / NON_COMPILE / ECHEC_AGENT
      │
  JOURNAL (matches.db) ──► relu par le penseur à l'essai suivant
      │
@@ -40,17 +40,16 @@ calcul (SPRT), l'IA propose.
 | Déploiement automatique sur le VPS à chaque poussée sur `main` validée par la CI | Utilisateur |
 | Supervision par le dashboard Aspire | Utilisateur |
 | Bot en C++ (4 des 5 premiers du classement) | Proposé, accepté |
-| Penseur et codeur séparés, modèle fort / modèle léger | Utilisateur |
-| Aucune soumission automatique au classement | Par défaut |
+| Penseur et codeur séparés | Utilisateur |
+| Modèles Google uniquement (Gemini 3.8 Flash High pour penser, Medium pour coder) | Utilisateur, 2026-11-11 |
+| Chaque nouveau champion est soumis au classement, sans attendre l'utilisateur | Utilisateur, 2026-11-11 |
 
-## 3. Limite actuelle : la ligue Silver
+## 3. Ligues
 
-Le moteur robostac ne simule que le jeu complet à **deux pods par joueur** (ligues Gold et
-Legend). Le compte est en **Silver** (un pod par joueur, autres entrées). Tant que le compte
-reste en Silver, la ferme se met en pause d'elle-même avec un message clair.
-
-Pour sortir de Silver, `pipelines/mad-pod-racing/silver/Bot.cpp` a gagné 5 parties de test
-sur 6 contre le boss Silver le 2026-11-10. Le soumettre est une décision de l'utilisateur.
+Le moteur robostac ne simule que le jeu complet à **deux pods par joueur** (Gold et Legend).
+La ferme se met en pause d'elle-même dans toute autre ligue. Le compte est sorti de Silver
+le 2026-11-11 grâce à `pipelines/mad-pod-racing/silver/Bot.cpp` (5 victoires sur 6 contre le
+boss Silver, puis 1er de Silver sur 75 102) ; il est en Gold depuis 02 h 17 UTC.
 
 ## 4. Code
 
@@ -63,7 +62,7 @@ sur 6 contre le boss Silver le 2026-11-10. Le soumettre est une décision de l'u
 | Bots | `Core/Arena/BotBuilder.cs`, `BotProcess.cs` | Compilation en cache par empreinte du source ; processus piloté ligne à ligne |
 | Duel | `Core/Arena/Duel.cs` | Graines 1..N, chaque graine jouée deux fois places échangées, en parallèle, jusqu'au verdict |
 | Juge | `Core/Judging/Sprt.cs` | Test séquentiel de Wald (H0 : 0 Elo, H1 : `elo1`) |
-| Agents | `Core/Agents/AgentRunner.cs` | `agy -p` ; statut JSON lu (le code de sortie ne prouve rien) ; durée bornée par nous ; utilisateur `agent` séparé |
+| Agents | `Core/Agents/AgentRunner.cs` | `agy -p` ; statut JSON lu (le code de sortie ne prouve rien) ; durée bornée par nous ; utilisateur `agent` séparé. Une réponse vide est relancée (`boucle.relances_reponse_vide`) |
 | Essai | `Core/Pipeline/Trial.cs` | Enchaîne les étapes du §1 |
 | Ferme | `Core/Pipeline/Farm.cs` | Boucle continue, pauses automatiques (connexion, quota, ligue, configuration) |
 | Commandes | `Cli/Program.cs` | `servir`, `essai`, `verifier`, `bilan`, `duel <a> <b> [n]` |
@@ -107,11 +106,24 @@ ssh ovh-vps 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-comp
 ssh ovh-vps 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compose.yml exec farm dotnet /app/farm.dll bilan'
 ```
 
-## 8. Non vérifié
+## 8. Résultats et points ouverts (2026-11-11, 10 h UTC)
 
-- La connexion d'Antigravity dans le conteneur et son fonctionnement sans écran avec le
-  trousseau embarqué : le trousseau est testé, la connexion attend l'utilisateur.
-- Les noms de modèles par défaut : à ajuster d'après `agy models` une fois connecté.
+Premier fonctionnement réel, de 02 h 17 à 10 h UTC :
+
+- 27 essais : 5 GARDE, 15 JETE, 6 ECHEC_AGENT, 1 interrompu.
+- Le compte est passé de 73 424ᵉ de Silver à 2ᵉ de Gold sur 14 311, éligible à Legend.
+- Le regard neuf a servi : appelé après 6 rejets, l'essai suivant a été gardé.
+- La pause sur quota CodinGame insuffisant a fonctionné, puis la reprise.
+
+Corrigé le jour même :
+
+- Le penseur rendait parfois un succès sans texte (6 essais sur 27) : relance automatique.
+- `bilan` et `verifier` marquaient l'essai en cours comme interrompu : seule la boucle clôt
+  désormais les essais restés ouverts.
+
+Toujours non vérifié :
+
 - Ce que renvoie Antigravity quand le quota de l'abonnement est épuisé.
-- La boucle complète d'un essai n'a jamais tourné : elle attend la ligue Gold et la connexion.
 - La poussée maximale en Gold : le moteur accepte jusqu'à 200, le bot reste à 100.
+- La confirmation sur CodinGame ne bloque que les fautes ; elle ne compare pas les scores
+  (4 parties, trop peu pour trancher).

@@ -88,8 +88,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("HISTORIQUE.md", History(cfg.Contexte.EssaisResumes)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var think = await agents.RunAsync(new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, Instruction), ct);
-        journal.AddTrialTokens(id, think.Tokens);
+        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, Instruction), ct);
         if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
         {
             return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
@@ -254,8 +253,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("HISTORIQUE.md", History(int.MaxValue)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION_PRECEDENTE.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var look = await agents.RunAsync(new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, Instruction), ct);
-        ctx.Journal.AddTrialTokens(id, look.Tokens);
+        var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, Instruction), ct);
         if (look.Success && !string.IsNullOrWhiteSpace(look.Response))
         {
             await File.WriteAllTextAsync(ctx.Paths.Orientation, look.Response.Trim(), ct);
@@ -266,6 +264,25 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         {
             log.LogWarning("Essai {Essai} : le regard neuf a échoué : {Erreur}", id, look.Error);
         }
+    }
+
+    /// <summary>
+    /// Appel d'un agent dont la réponse est le produit (penseur, regard neuf). Antigravity rend
+    /// parfois un succès sans aucun texte : on relance alors, dans la limite de la configuration.
+    /// </summary>
+    private async Task<AgentResult> AskAsync(long id, AgentRequest request, CancellationToken ct)
+    {
+        var result = await agents.RunAsync(request, ct);
+        ctx.Journal.AddTrialTokens(id, result.Tokens);
+        for (var retry = 0; retry < ctx.Config.Boucle.RelancesReponseVide
+             && result.Success && string.IsNullOrWhiteSpace(result.Response); retry++)
+        {
+            log.LogWarning("Essai {Essai} : réponse vide du {Role}, relance {N}", id, request.Role, retry + 1);
+            result = await agents.RunAsync(request, ct);
+            ctx.Journal.AddTrialTokens(id, result.Tokens);
+        }
+
+        return result;
     }
 
     private async Task WriteWorkspaceAsync(string dir, string role, CancellationToken ct, params (string Name, string Content)[] files)

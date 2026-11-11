@@ -24,7 +24,9 @@ plupart décrivent une conception plus vaste, mise de côté.
 1. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation, ne se
    committe jamais.** Sur le PC : `~/.config/codingame/token`. Sur le VPS :
    `/opt/codingame-farm/secrets/codingame_token`, root, lecture seule, illisible par l'agent.
-2. **Aucune soumission automatique** au classement : c'est la décision de l'utilisateur.
+2. **Soumission automatique des champions**, autorisée par l'utilisateur le 2026-11-11
+   (`api.soumettre_champions`). Seul un candidat gardé par le SPRT puis sans faute sur
+   CodinGame est soumis ; rien d'autre ne soumet.
 3. **Jamais de jeu d'arcade**, aucune modification du compte CodinGame.
 4. **Tout accès à CodinGame passe par `CodinGameClient`**, tout appel d'IA par `AgentRunner`.
 5. **Aucune valeur en dur** : réglages dans `pipeline.json` (relu à chaque essai), limites
@@ -42,7 +44,8 @@ Documents : liens relatifs, pas de LaTeX, chaque fichier daté et doté d'un sta
 
 ```
 src/CodinGame.Core/          logique : config, journal, API, moteur, duel, juge, agents, boucle
-src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel)
+src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel) ; bilan et
+                             verifier ne modifient pas le journal
 src/CodinGame.ServiceDefaults/ télémétrie OTLP vers le dashboard Aspire
 src/CodinGame.AppHost/       lancement local avec le dashboard Aspire
 tests/CodinGame.Tests/       tests ; les parties réelles tournent dans l'image Docker
@@ -50,12 +53,13 @@ pipelines/mad-pod-racing/    configuration, consignes des agents, bots de dépar
 deploy/                      compose, entrée du conteneur, timer de déploiement du VPS
 ```
 
-## État réel (relevé le 2026-11-11)
+## État réel (relevé le 2026-11-11 à 10 h UTC)
 
-- Déployé et en marche sur le VPS ; 14 tests verts dans l'image, dont 3 parties réelles.
-- La ferme est **en pause** : le compte est en Silver, le moteur ne couvre que Gold et Legend.
-- Antigravity n'est **pas encore connecté** : connexion interactive à faire par l'utilisateur.
-- Aucun essai complet n'a encore tourné.
+- La ferme **tourne seule** sur le VPS, avec Antigravity connecté et des modèles Google
+  uniquement (choix de l'utilisateur).
+- Compte en **Gold**, 2ᵉ sur 14 311 et éligible à Legend ; 1 967ᵉ mondial.
+- 27 essais, 5 champions gardés et soumis. `farm bilan` donne l'état à jour.
+- 14 tests verts dans l'image, dont 3 parties réelles avec le moteur.
 
 ## Commandes
 

@@ -34,6 +34,7 @@
     "essais_par_jour": 40,
     "rejets_avant_regard_neuf": 6,
     "corrections_compilation_max": 2,
+    "relances_reponse_vide": 1,
     "pause_minutes_si_echec_agent": 60,
     "pause_minutes_si_inactif": 5
   },

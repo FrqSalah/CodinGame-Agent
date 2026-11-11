@@ -30,6 +30,7 @@ public sealed record LoopSettings(
     int EssaisParJour,
     int RejetsAvantRegardNeuf,
     int CorrectionsCompilationMax,
+    int RelancesReponseVide,
     int PauseMinutesSiEchecAgent,
     int PauseMinutesSiInactif);
 
@@ -99,6 +100,7 @@ public sealed record PipelineConfig(
         Check(Boucle.EssaisParJour >= 0, "boucle.essais_par_jour", "positif ou nul");
         Check(Boucle.RejetsAvantRegardNeuf >= 1, "boucle.rejets_avant_regard_neuf", "au moins 1");
         Check(Boucle.CorrectionsCompilationMax >= 0, "boucle.corrections_compilation_max", "positif ou nul");
+        Check(Boucle.RelancesReponseVide is >= 0 and <= 5, "boucle.relances_reponse_vide", "entre 0 et 5");
         Check(Boucle.PauseMinutesSiEchecAgent >= 1 && Boucle.PauseMinutesSiInactif >= 1, "boucle.pause_minutes_*", "au moins 1");
         Check(Contexte.EssaisResumes >= 1, "contexte.essais_resumes", "au moins 1");
         return errors;
