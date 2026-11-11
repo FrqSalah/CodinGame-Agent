@@ -90,6 +90,14 @@ public sealed partial class AntigravityRunner(ILogger<AntigravityRunner> log) : 
             return new AgentResult(false, response, $"statut {status} : {error}", seconds, tokens);
         }
 
+        // Sans écran, une action non autorisée est refusée d'office et le run s'arrête sans texte,
+        // tout en annonçant un succès : c'est un échec, et il faut dire lequel.
+        if (envelope["denied_actions"] is JsonArray { Count: > 0 } denied)
+        {
+            var actions = string.Join(", ", denied.Select(d => (string?)d?["action"]).Distinct());
+            return new AgentResult(false, response, $"action refusée par Antigravity ({actions}) : il manque une règle d'autorisation", seconds, tokens);
+        }
+
         if (!string.IsNullOrWhiteSpace(stderr))
         {
             log.LogDebug("Antigravity ({Role}) a écrit sur sa sortie d'erreur : {Stderr}", request.Role, Tail(stderr));
@@ -148,10 +156,12 @@ public sealed partial class AntigravityRunner(ILogger<AntigravityRunner> log) : 
     }
 
     /// <summary>
-    /// Interdit à l'agent les commandes et le réseau, et l'accès hors de son dossier.
+    /// Interdit à l'agent les commandes et le réseau. Hors de son dossier, il ne peut que lire
+    /// <paramref name="readable"/> (les données des pipelines) : sans cela, une simple tentative de
+    /// lecture voisine fait échouer tout le run. Le token reste illisible par les droits Unix.
     /// À appeler au démarrage : le fichier de réglages d'Antigravity est fusionné, pas remplacé.
     /// </summary>
-    public static void EnsurePermissions(string agentHome)
+    public static void EnsurePermissions(string agentHome, IEnumerable<string> readable)
     {
         var path = Path.Combine(agentHome, ".gemini", "antigravity-cli", "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -168,6 +178,17 @@ public sealed partial class AntigravityRunner(ILogger<AntigravityRunner> log) : 
         }
 
         permissions["deny"] = deny;
+        var allow = permissions["allow"] as JsonArray ?? [];
+        foreach (var dir in readable)
+        {
+            var rule = $"read_file({dir.TrimEnd('/')}/)";
+            if (!allow.Any(a => (string?)a == rule))
+            {
+                allow.Add(rule);
+            }
+        }
+
+        permissions["allow"] = allow;
         settings["permissions"] = permissions;
         File.WriteAllText(path, settings.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }

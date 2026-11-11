@@ -76,7 +76,7 @@ async Task<int> Serve()
 {
     if (Environment.GetEnvironmentVariable("FARM_AGENT_USER") is { } user)
     {
-        AntigravityRunner.EnsurePermissions($"/home/{user}");
+        AntigravityRunner.EnsurePermissions($"/home/{user}", [Path.Combine(paths.DataRoot, "pipelines"), paths.SeedRoot]);
         await host.Services.GetRequiredService<IAgentRunner>().GrantAsync($"/home/{user}/.gemini", ct);
     }
 

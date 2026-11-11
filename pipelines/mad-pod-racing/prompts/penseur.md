@@ -36,3 +36,5 @@ POURQUOI : ce qui, dans le code, l'historique ou la physique, justifie cette id�
 CHANGEMENT : quoi modifier, à quel endroit du code, avec formules et valeurs exactes, et le
 comportement attendu. Assez précis pour qu'un autre développeur l'applique sans deviner.
 RISQUE : ce qui pourrait mal tourner (temps de calcul, cas limites).
+
+Toute la note tient en moins de 400 mots : pas de code complet, seulement ce qui change.

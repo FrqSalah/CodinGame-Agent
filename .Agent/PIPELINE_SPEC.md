@@ -120,7 +120,12 @@ Premier fonctionnement réel, de 02 h 17 à 10 h UTC :
 
 Corrigé le jour même :
 
-- Le penseur rendait parfois un succès sans texte (6 essais sur 27) : relance automatique.
+- Le penseur rendait parfois un succès sans texte (13 essais sur 37). Cause trouvée le
+  2026-11-11 grâce aux journaux : quand l'agent tente de lire un fichier hors de son dossier,
+  Antigravity sans écran refuse l'action d'office et s'arrête sans rien répondre. La lecture
+  des données des pipelines est désormais autorisée (jamais le token, protégé par les droits
+  Unix), une action refusée devient une erreur explicite, et la note du penseur est limitée
+  à 400 mots (un essai avait dépassé la limite de tokens de sortie).
 - `bilan` et `verifier` marquaient l'essai en cours comme interrompu : seule la boucle clôt
   désormais les essais restés ouverts.
 
