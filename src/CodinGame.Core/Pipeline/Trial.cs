@@ -416,14 +416,24 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return sb.ToString();
     }
 
-    private static string IdeaOf(string note)
+    /// <summary>
+    /// L'idée d'une note : le texte après « IDEE : », sur la même ligne ou, si le modèle est passé
+    /// à la ligne, sur la première ligne non vide qui suit.
+    /// </summary>
+    public static string IdeaOf(string note)
     {
-        foreach (var line in note.Split('\n'))
+        var lines = note.Split('\n').Select(l => l.Trim().Trim('*').Trim()).ToList();
+        for (var i = 0; i < lines.Count; i++)
         {
-            var l = line.Trim().TrimStart('#', '*', '-', ' ');
+            var l = lines[i].TrimStart('#', '-', ' ');
             if (l.StartsWith("IDEE", StringComparison.OrdinalIgnoreCase) || l.StartsWith("IDÉE", StringComparison.OrdinalIgnoreCase))
             {
                 var value = l[4..].TrimStart(':', ' ', '*', '\t');
+                if (value.Length == 0)
+                {
+                    value = lines.Skip(i + 1).FirstOrDefault(x => x.Length > 0) ?? "";
+                }
+
                 if (value.Length > 0)
                 {
                     return Clip(value, 200);
@@ -431,7 +441,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             }
         }
 
-        return Clip(note.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "", 200);
+        return Clip(lines.FirstOrDefault(l => l.Length > 0) ?? "", 200);
     }
 
     private static string ResultFor(MatchResult r, int seat) =>

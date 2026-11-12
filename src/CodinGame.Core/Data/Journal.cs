@@ -90,6 +90,20 @@ public sealed class Journal : IDisposable
         return Convert.ToInt64(Scalar("SELECT last_insert_rowid()"), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Recalcule les idées enregistrées vides à partir de leur note. Renvoie le nombre réparé.</summary>
+    public int RepairIdeas(Func<string, string> ideaOf)
+    {
+        var broken = Query(
+            "SELECT id, note FROM essais WHERE note IS NOT NULL AND TRIM(COALESCE(idee, '')) IN ('', 'IDEE :', 'IDEE:', 'IDÉE :', 'IDÉE:')",
+            r => (r.GetInt64(0), r.GetString(1)));
+        foreach (var (id, note) in broken)
+        {
+            Exec("UPDATE essais SET idee = $i WHERE id = $id", ("$i", ideaOf(note)), ("$id", id));
+        }
+
+        return broken.Count;
+    }
+
     public void SetTrialNote(long id, string idea, string note) =>
         Exec("UPDATE essais SET idee = $i, note = $n WHERE id = $id", ("$i", idea), ("$n", note), ("$id", id));
 

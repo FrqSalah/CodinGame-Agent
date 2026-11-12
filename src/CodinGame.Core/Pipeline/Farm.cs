@@ -161,6 +161,12 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
 
         var journal = new Journal(p.Journal);
         var closed = closeInterrupted ? journal.CloseInterruptedTrials() : 0;
+        var repaired = closeInterrupted ? journal.RepairIdeas(Trial.IdeaOf) : 0;
+        if (repaired > 0)
+        {
+            log.LogInformation("Pipeline {Pipeline} : {N} idée(s) vide(s) réparée(s) dans le journal", name, repaired);
+        }
+
         if (closed > 0)
         {
             log.LogWarning("Pipeline {Pipeline} : {N} essai(s) interrompu(s) clos", name, closed);
