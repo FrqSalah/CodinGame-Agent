@@ -22,7 +22,9 @@
     "elo0": 0,
     "elo1": 40,
     "alpha": 0.05,
-    "beta": 0.05
+    "beta": 0.05,
+    "parties_prolongation": 1000,
+    "llr_prolongation": 1.5
   },
   "api": {
     "parties_confirmation": 4,

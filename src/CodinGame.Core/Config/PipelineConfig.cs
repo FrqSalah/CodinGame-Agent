@@ -21,7 +21,9 @@ public sealed record ArenaSettings(
     double Elo0,
     double Elo1,
     double Alpha,
-    double Beta);
+    double Beta,
+    int PartiesProlongation,
+    double LlrProlongation);
 
 public sealed record ApiSettings(int PartiesConfirmation, string Adversaire, bool SoumettreChampions);
 
@@ -94,6 +96,8 @@ public sealed record PipelineConfig(
         Check(Arene.ToleranceTemps >= 1, "arene.tolerance_temps", "au moins 1");
         Check(Arene.PartiesMin >= 2 && Arene.PartiesMax >= Arene.PartiesMin, "arene.parties_min / parties_max", "il faut 2 ≤ min ≤ max");
         Check(Arene.Elo1 > Arene.Elo0, "arene.elo1", "doit dépasser arene.elo0");
+        Check(Arene.PartiesProlongation >= Arene.PartiesMax, "arene.parties_prolongation", "au moins arene.parties_max (égal = jamais de prolongation)");
+        Check(Arene.LlrProlongation > 0, "arene.llr_prolongation", "positif");
         Check(Arene.Alpha is > 0 and < 0.5 && Arene.Beta is > 0 and < 0.5, "arene.alpha / beta", "entre 0 et 0,5");
         Check(Api.PartiesConfirmation >= 0, "api.parties_confirmation", "positif ou nul");
         Check(!string.IsNullOrWhiteSpace(Api.Adversaire), "api.adversaire", "obligatoire (« boss » ou un agent_id)");

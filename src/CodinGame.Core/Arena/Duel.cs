@@ -14,6 +14,8 @@ public sealed record DuelOutcome(int Wins, int Losses, int Draws, SprtDecision D
 /// séquentiel tranche. Chaque graine (donc chaque circuit) est jouée deux fois, places
 /// échangées, pour que l'avantage d'une place ne compte pas. Les graines vont de 1 à N :
 /// tous les essais sont mesurés sur les mêmes circuits. Une faute du candidat arrête tout.
+/// Si le plafond est atteint sans verdict alors que le candidat mène nettement, le duel est
+/// prolongé : les petits progrès, de plus en plus fréquents, demandent plus de parties.
 /// </summary>
 public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
 {
@@ -35,8 +37,12 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         string? fault = null;
         var decision = SprtDecision.Continue;
         var running = new List<Task>();
+        var limit = settings.PartiesMax;
+        var k = 0;
 
-        for (var k = 0; k < settings.PartiesMax; k++)
+        while (true)
+        {
+        for (; k < limit; k++)
         {
             try
             {
@@ -107,6 +113,17 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         await Task.WhenAll(running);
         ct.ThrowIfCancellationRequested();
 
+        if (fault is null && decision == SprtDecision.Continue && ShouldProlong(settings, limit, sprt.Llr(wins, losses)))
+        {
+            log.LogInformation("Duel prolongé de {De} à {A} parties : le candidat mène ({Wins} V / {Losses} D, LLR {Llr:F2})",
+                limit, settings.PartiesProlongation, wins, losses, sprt.Llr(wins, losses));
+            limit = settings.PartiesProlongation;
+            continue;
+        }
+
+        break;
+        }
+
         if (fault is null && decision == SprtDecision.Continue)
         {
             // Plafond de parties atteint sans verdict : l'écart, s'il existe, est trop petit pour être mesuré.
@@ -118,6 +135,10 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
             wins, losses, draws, outcome.Llr, outcome.Decision, fault is null ? "" : $", faute du candidat : {fault}");
         return outcome;
     }
+
+    /// <summary>Prolonger un duel arrivé au plafond sans verdict ? Une seule prolongation, si le candidat mène assez.</summary>
+    internal static bool ShouldProlong(ArenaSettings settings, int limit, double llr) =>
+        limit < settings.PartiesProlongation && llr >= settings.LlrProlongation;
 
     private async Task<MatchResult> PlayOneAsync(
         long seed, int candidateSeat, string candidateExe, string championExe, TurnLimits limits, CancellationToken ct)

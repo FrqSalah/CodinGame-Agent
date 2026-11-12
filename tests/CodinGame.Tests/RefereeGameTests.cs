@@ -43,7 +43,7 @@ public class RefereeGameTests
     public async Task Duel_of_identical_bots_is_not_a_promotion()
     {
         var exe = await BuildSeedBotAsync();
-        var settings = new CodinGame.Core.Config.ArenaSettings(Referee!, 2, 1000, 75, 3.0, 10, 40, 0, 40, 0.05, 0.05);
+        var settings = new CodinGame.Core.Config.ArenaSettings(Referee!, 2, 1000, 75, 3.0, 10, 40, 0, 40, 0.05, 0.05, 40, 1.5);
 
         var outcome = await new Duel(new RefereeGame(Referee!), settings, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance)
             .RunAsync(exe, exe, null, TestContext.Current.CancellationToken);

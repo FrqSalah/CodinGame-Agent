@@ -137,6 +137,13 @@ seule fois avec la note, le moteur et le bot seulement, et la liste des idées r
 bornée (`contexte.idees_rejetees`). Le journal garde les tokens par rôle ; `farm bilan` en
 affiche la moyenne. Effet à mesurer sur une dizaine d'essais.
 
+Duels prolongés (2026-11-12) : en Legend, les gros gains se raréfient. Deux candidats proches
+de +30 Elo (essais 63 et 67) ont été jetés au plafond de 600 parties, faute de verdict. Un duel
+qui atteint le plafond alors que le candidat mène (LLR ≥ `arene.llr_prolongation`, 1,5) est
+désormais prolongé une fois jusqu'à `arene.parties_prolongation` (1 000) ; les égalités ne le
+sont pas. Le même jour, l'extraction de l'idée a été corrigée : 8 idées étaient enregistrées
+vides, et le penseur reproposait des idées déjà jetées.
+
 Toujours non vérifié :
 
 - Ce que renvoie Antigravity quand le quota de l'abonnement est épuisé.
