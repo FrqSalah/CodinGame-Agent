@@ -50,6 +50,9 @@ public sealed class PipelinePaths(string seedDir, string dataDir)
 
     /// <summary>Ce que les agents doivent savoir du moteur du jeu (livré avec la pipeline).</summary>
     public string EngineNotes => Path.Combine(SeedDir, "moteur.md");
+
+    /// <summary>Techniques qui ont fait leurs preuves dans ce jeu, pour orienter le penseur (livré avec la pipeline).</summary>
+    public string Strategy => Path.Combine(SeedDir, "strategie.md");
     public string Orientation => Path.Combine(DataDir, "orientation.md");
     public string Trials => Path.Combine(DataDir, "essais");
     public string BotCache => Path.Combine(DataDir, "cache", "bots");

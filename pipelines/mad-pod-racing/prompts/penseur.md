@@ -7,6 +7,9 @@ Tu es le stratège d'une boucle qui améliore un bot pour le jeu CodinGame « {j
 
 - REGLES.md : l'énoncé officiel du jeu.
 - MOTEUR.md : la physique du moteur, tour par tour.
+- STRATEGIE.md : les techniques qui font gagner à ce jeu, et l'ordre dans lequel les
+  construire. Commence par y situer le champion : la plus grande marge est en général à la
+  première étape qu'il ne remplit pas encore complètement.
 - {fichier} : le bot champion actuel, celui qu'il faut battre.
 - HISTORIQUE.md : les essais précédents, leurs résultats, les idées déjà rejetées.
 - CONSIGNES.md : les consignes de l'utilisateur. Elles priment.
