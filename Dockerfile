@@ -29,8 +29,9 @@ RUN curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh 
  && rm -rf /tmp/agy-install.sh /root/.cache/antigravity \
  && agy --version
 
-# L'agent tourne sous son propre utilisateur : il ne peut pas lire le token CodinGame.
-RUN useradd --create-home --uid 1001 agent
+# L'agent et les bots tournent chacun sous leur propre utilisateur, sans accès au token
+# CodinGame ni à la connexion d'Antigravity.
+RUN useradd --create-home --uid 1001 agent && useradd --no-create-home --uid 1002 bot
 
 COPY --from=referee /out/csbref /usr/local/bin/csbref
 COPY --from=build /app /app
@@ -42,6 +43,7 @@ ENV FARM_DATA=/data \
     FARM_SEED=/app/pipelines \
     CODINGAME_TOKEN_FILE=/run/secrets/codingame_token \
     FARM_AGENT_USER=agent \
+    FARM_BOT_USER=bot \
     FARM_AGENT_DBUS=unix:path=/run/agent-dbus/bus \
     AGY_CLI_DISABLE_AUTO_UPDATE=true
 

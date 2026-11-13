@@ -10,9 +10,14 @@ public sealed class BotProcess : IBotConnection, IAsyncDisposable
 
     private BotProcess(Process process) => _process = process;
 
+    /// <summary>
+    /// Lance un bot. Avec <c>FARM_BOT_USER</c>, il tourne sous cet utilisateur sans droits et sans
+    /// l'environnement de la ferme : un bot (écrit par un agent ou venu d'ailleurs) ne peut ni lire
+    /// le token CodinGame ni la connexion d'Antigravity.
+    /// </summary>
     public static BotProcess Start(string executable)
     {
-        var info = new ProcessStartInfo(executable)
+        var info = new ProcessStartInfo
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -20,6 +25,21 @@ public sealed class BotProcess : IBotConnection, IAsyncDisposable
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        if (Environment.GetEnvironmentVariable("FARM_BOT_USER") is { Length: > 0 } user)
+        {
+            info.FileName = "setpriv";
+            foreach (var a in new[] { $"--reuid={user}", $"--regid={user}", "--init-groups", "--", executable })
+            {
+                info.ArgumentList.Add(a);
+            }
+
+            info.Environment.Clear();
+            info.Environment["PATH"] = "/usr/bin:/bin";
+        }
+        else
+        {
+            info.FileName = executable;
+        }
         var process = Process.Start(info) ?? throw new InvalidOperationException($"Impossible de lancer {executable}.");
         process.ErrorDataReceived += (_, _) => { };
         process.BeginErrorReadLine();
