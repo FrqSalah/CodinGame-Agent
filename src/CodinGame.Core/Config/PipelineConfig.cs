@@ -4,9 +4,16 @@ using System.Text.Json.Serialization;
 
 namespace CodinGame.Core.Config;
 
-public sealed record AgentRole(string Outil, string Modele, int MinutesMax);
+/// <param name="Modele">Le modèle le plus fort, utilisé tant qu'il répond.</param>
+/// <param name="Secours">Les modèles suivants, du plus fort au moins fort, pris quand les précédents sont à leur limite.</param>
+public sealed record AgentRole(string Outil, string Modele, int MinutesMax, IReadOnlyList<string> Secours)
+{
+    /// <summary>La chaîne complète, du plus fort au moins fort.</summary>
+    public IReadOnlyList<string> Chain() => [Modele, .. Secours.Where(s => s != Modele)];
+}
 
-public sealed record AgentRoles(AgentRole Penseur, AgentRole Codeur, AgentRole RegardNeuf);
+/// <param name="BlocageMinutes">Durée pendant laquelle un modèle à sa limite est écarté avant d'être réessayé.</param>
+public sealed record AgentRoles(AgentRole Penseur, AgentRole Codeur, AgentRole RegardNeuf, int BlocageMinutes);
 
 public sealed record BotSettings(string Fichier, string Compilation);
 
@@ -38,6 +45,9 @@ public sealed record LoopSettings(
 
 public sealed record ContextSettings(int EssaisResumes, int IdeesRejetees);
 
+/// <summary>Banc d'adversaires extérieurs : sources de bots publiés par d'autres joueurs (vide = pas de banc).</summary>
+public sealed record BenchSettings(IReadOnlyList<string> Adversaires, int PartiesParAdversaire, string Compilation);
+
 /// <summary>
 /// Réglages d'une pipeline (<c>pipeline.json</c>). Relus au début de chaque essai :
 /// modifier le fichier suffit, sans recompiler ni redémarrer.
@@ -51,7 +61,8 @@ public sealed record PipelineConfig(
     ArenaSettings Arene,
     ApiSettings Api,
     LoopSettings Boucle,
-    ContextSettings Contexte)
+    ContextSettings Contexte,
+    BenchSettings Banc)
 {
     /// <summary>Outils d'IA pris en charge.</summary>
     public static readonly string[] SupportedTools = ["agy"];
@@ -88,9 +99,11 @@ public sealed record PipelineConfig(
             Check(SupportedTools.Contains(role.Outil), $"agents.{name}.outil", $"« {role.Outil} » inconnu ; valeurs possibles : {string.Join(", ", SupportedTools)}");
             Check(!string.IsNullOrWhiteSpace(role.Modele), $"agents.{name}.modele", "obligatoire");
             Check(role.MinutesMax is >= 1 and <= 120, $"agents.{name}.minutes_max", "entre 1 et 120");
+            Check(role.Secours.All(s => !string.IsNullOrWhiteSpace(s)), $"agents.{name}.secours", "noms de modèles non vides");
         }
 
         Check(!string.IsNullOrWhiteSpace(Arene.Arbitre), "arene.arbitre", "commande du moteur obligatoire");
+        Check(Agents.BlocageMinutes >= 1, "agents.blocage_minutes", "au moins 1");
         Check(Arene.Parallele is >= 1 and <= 64, "arene.parallele", "entre 1 et 64");
         Check(Arene.PremierTourMs > 0 && Arene.TourMs > 0, "arene.premier_tour_ms / tour_ms", "doivent être positifs");
         Check(Arene.ToleranceTemps >= 1, "arene.tolerance_temps", "au moins 1");
@@ -108,6 +121,8 @@ public sealed record PipelineConfig(
         Check(Boucle.PauseMinutesSiEchecAgent >= 1 && Boucle.PauseMinutesSiInactif >= 1, "boucle.pause_minutes_*", "au moins 1");
         Check(Contexte.EssaisResumes >= 1, "contexte.essais_resumes", "au moins 1");
         Check(Contexte.IdeesRejetees >= 1, "contexte.idees_rejetees", "au moins 1");
+        Check(Banc.Compilation.Contains("{source}") && Banc.Compilation.Contains("{sortie}"), "banc.compilation", "doit contenir {source} et {sortie}");
+        Check(Banc.PartiesParAdversaire >= 2 && Banc.PartiesParAdversaire % 2 == 0, "banc.parties_par_adversaire", "pair, au moins 2 (chaque circuit est joué des deux places)");
         return errors;
     }
 }

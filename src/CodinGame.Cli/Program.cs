@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 //   bilan [pipeline]       résumé du journal
 //   duel <a> <b> [n]       duel local entre deux sources de bot, avec le moteur de la pipeline
 //   rejuger <essai>        rejuge le candidat d'un essai passé (duel, confirmation, promotion)
+//   banc                   mesure le champion contre les adversaires extérieurs (résultats gardés au journal)
 
 var command = args.FirstOrDefault() ?? "servir";
 var rest = args.Skip(1).ToArray();
@@ -33,7 +34,8 @@ builder.Services.AddSingleton(sp => new CodinGameClient(
     sp.GetRequiredService<HttpClient>(),
     sp.GetRequiredService<FarmPaths>().TokenFile,
     sp.GetRequiredService<ILogger<CodinGameClient>>()));
-builder.Services.AddSingleton<IAgentRunner, AntigravityRunner>();
+builder.Services.AddSingleton<AntigravityRunner>();
+builder.Services.AddSingleton<IAgentRunner, FallbackAgentRunner>();
 builder.Services.AddSingleton<Farm>();
 
 using var host = builder.Build();
@@ -53,6 +55,7 @@ try
         "verifier" => await Check(),
         "bilan" => Report(),
         "duel" => await LocalDuel(),
+        "banc" => await BenchChampion(),
         "rejuger" when rest.Length > 0 => (await farm.RejudgeAsync(paths.PipelineNames().First(), long.Parse(rest[0], CultureInfo.InvariantCulture), ct)).Verdict == Verdicts.Kept ? 0 : 2,
         _ => Usage(),
     };
@@ -119,6 +122,11 @@ async Task<int> Check()
         if (status.Models.Count > 0)
         {
             Console.WriteLine($"         modèles : {string.Join(", ", status.Models)}");
+        }
+
+        if (host.Services.GetRequiredService<IAgentRunner>() is FallbackAgentRunner chain && chain.Blocked().Count > 0)
+        {
+            Console.WriteLine($"         modèles écartés (limite atteinte) : {string.Join(", ", chain.Blocked().Select(b => $"{b.Key} jusqu'à {b.Value:HH:mm} UTC"))}");
         }
 
         if (await host.Services.GetRequiredService<CodinGameClient>().TestGamesLeftAsync(ctx.Config.Jeu, ct) is { } left)
@@ -188,10 +196,36 @@ async Task<int> LocalDuel()
     return 0;
 }
 
+async Task<int> BenchChampion()
+{
+    var (ctx, journal) = farm.Open(paths.PipelineNames().First());
+    using (journal)
+    {
+        if (ctx.Config.Banc.Adversaires.Count == 0)
+        {
+            log.LogError("Aucun adversaire dans banc.adversaires");
+            return 1;
+        }
+
+        var hash = journal.ChampionHash() ?? throw new ConfigException("aucun champion");
+        var build = await ctx.Builder.BuildAsync(journal.BotSource(hash)!, ct);
+        var opponents = await ctx.BuildBenchOpponentsAsync(ct);
+        var results = await ctx.PlayBenchAsync(hash, build.Executable!, opponents, null, log, ct);
+        Console.WriteLine($"Champion {hash} contre le banc :");
+        foreach (var group in results.GroupBy(r => r.Key.Opponent))
+        {
+            var wins = group.Count(r => r.Value == CodinGame.Core.Arena.Results.Win);
+            Console.WriteLine($"  {group.Key,-34} {wins,3}/{group.Count()} victoires ({100.0 * wins / group.Count():F0} %)");
+        }
+    }
+
+    return 0;
+}
+
 static string Clip(string? s, int max) => s is null ? "" : s.Length <= max ? s : s[..max] + "…";
 
 static int Usage()
 {
-    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai>]");
+    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai> | banc]");
     return 64;
 }

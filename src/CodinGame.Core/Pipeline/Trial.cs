@@ -101,7 +101,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("HISTORIQUE.md", History(cfg.Contexte.EssaisResumes)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt), ct);
+        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
         {
             return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
@@ -119,7 +119,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("NOTE.md", note),
             ("MOTEUR.md", engine),
             (botFile, championSource));
-        var code = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, codePrompt), ct);
+        var code = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, codePrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         journal.AddTrialTokens(id, "codeur", code.Tokens);
         var candidate = ReadOrEmpty(Path.Combine(codeDir, botFile));
         if (!code.Success)
@@ -144,7 +144,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                 ("MOTEUR.md", engine),
                 (botFile, candidate),
                 ("ERREURS.md", Clip(build.Errors, 6000)));
-            var fix = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, fixPrompt), ct);
+            var fix = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, fixPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
             journal.AddTrialTokens(id, "codeur", fix.Tokens);
             candidate = ReadOrEmpty(Path.Combine(codeDir, botFile));
             build = await ctx.Builder.BuildAsync(candidate, ct);
@@ -210,7 +210,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         using (Telemetry.Source.StartActivity("duel"))
         {
             duel = await new Duel(ctx.Referee, cfg.Arene, log).RunAsync(candidateExe, championBuild.Executable!,
-                (seed, seat, r) => journal.AddLocalGame(id, seed, seat, ResultFor(r, seat),
+                (seed, seat, r) => journal.AddLocalGame(id, seed, seat, Results.For(r, seat),
                     r.Faults[seat] == FaultKind.None ? null : r.Detail),
                 ct);
         }
@@ -226,7 +226,32 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.Rejected, $"pas d'amélioration mesurée : {score}"), duel);
         }
 
-        // 5. Confirmation sur CodinGame : le vrai moteur, le vrai compilateur, les vraies limites de temps.
+        // 5. Banc d'adversaires extérieurs : battre le champion ne suffit pas, il ne faut pas faire
+        //    moins bien que lui contre des bots d'autres joueurs, situation par situation.
+        if (cfg.Banc.Adversaires.Count > 0)
+        {
+            using (Telemetry.Source.StartActivity("banc"))
+            {
+                var (bench, fault) = await RunBenchAsync(hash, candidateExe, championHash, championBuild.Executable!, ct);
+                if (fault is not null)
+                {
+                    return (new TrialVerdict(Verdicts.Fault, $"banc : {fault}"), duel);
+                }
+
+                var n = bench.Cases;
+                var line = $"banc extérieur : candidat {bench.CandidateWins}/{n}, champion {bench.ChampionWins}/{n} (+{bench.Plus} / -{bench.Minus})";
+                log.LogInformation("Essai {Essai} : {Banc}", id, line);
+                if (bench.Minus > bench.Plus)
+                {
+                    return (new TrialVerdict(Verdicts.Rejected, $"meilleur que le champion mais moins bon que lui contre les adversaires extérieurs : {score} ; {line}"), duel);
+                }
+
+                score += $" ; {line}";
+                Telemetry.SetBenchWinRate((double)bench.CandidateWins / n);
+            }
+        }
+
+        // 6. Confirmation sur CodinGame : le vrai moteur, le vrai compilateur, les vraies limites de temps.
         //    Le candidat rejoue exactement les circuits des parties de confirmation du champion.
         var k = cfg.Api.PartiesConfirmation;
         if (k > 0)
@@ -262,6 +287,29 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         }
 
         return (new TrialVerdict(Verdicts.Kept, score), duel);
+    }
+
+    /// <summary>Résultat du banc : situations comparées, gagnées par chacun, et écart situation par situation.</summary>
+    private sealed record BenchOutcome(int Cases, int CandidateWins, int ChampionWins, int Plus, int Minus);
+
+    /// <summary>Fait jouer le banc au champion (résultats gardés au journal) puis au candidat, et les compare.</summary>
+    private async Task<(BenchOutcome Outcome, string? CandidateFault)> RunBenchAsync(
+        string hash, string candidateExe, string championHash, string championExe, CancellationToken ct)
+    {
+        var exes = await ctx.BuildBenchOpponentsAsync(ct);
+        var champion = await ctx.PlayBenchAsync(championHash, championExe, exes, null, log, ct);
+        var cases = champion.Keys.ToList();
+        Telemetry.SetBenchWinRate((double)cases.Count(c => champion[c] == Results.Win) / cases.Count);
+
+        string? fault = null;
+        var candidate = await ctx.PlayBenchAsync(hash, candidateExe, exes, (c, r) => fault ??= $"contre {c.Opponent} : {r.Detail}", log, ct);
+        if (fault is not null)
+        {
+            return (new BenchOutcome(cases.Count, 0, 0, 0, 0), fault);
+        }
+
+        var (plus, minus, cw, chw) = Bench.Compare(cases, candidate, champion);
+        return (new BenchOutcome(cases.Count, cw, chw, plus, minus), null);
     }
 
     /// <summary>Joue des parties de test sur CodinGame : une par option donnée (null = circuit tiré au hasard).</summary>
@@ -308,7 +356,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("HISTORIQUE.md", History(int.MaxValue)),
             ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION_PRECEDENTE.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, lookPrompt), ct);
+        var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, lookPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         if (look.Success && !string.IsNullOrWhiteSpace(look.Response))
         {
             await File.WriteAllTextAsync(ctx.Paths.Orientation, look.Response.Trim(), ct);
@@ -445,9 +493,6 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         return Clip(lines.FirstOrDefault(l => l.Length > 0) ?? "", 200);
     }
-
-    private static string ResultFor(MatchResult r, int seat) =>
-        r.IsDraw ? "egalite" : r.Winner == seat ? "victoire" : "defaite";
 
     private static string Label(Config.AgentRole r) => $"{r.Outil}/{r.Modele}";
 

@@ -97,12 +97,14 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                 return false;
             }
 
-            var unknown = new[] { cfg.Agents.Penseur, cfg.Agents.Codeur, cfg.Agents.RegardNeuf }
-                .Select(r => r.Modele).Distinct().Where(m => status.Models.Count > 0 && !status.Models.Contains(m)).ToList();
-            if (unknown.Count > 0)
+            // Chaque rôle doit avoir au moins un modèle de sa chaîne proposé par Antigravity.
+            var unusable = new[] { ("penseur", cfg.Agents.Penseur), ("codeur", cfg.Agents.Codeur), ("regard_neuf", cfg.Agents.RegardNeuf) }
+                .Where(r => status.Models.Count > 0 && !r.Item2.Chain().Any(status.Models.Contains))
+                .Select(r => r.Item1).ToList();
+            if (unusable.Count > 0)
             {
                 Pause(name, TimeSpan.FromMinutes(2),
-                    $"modèle(s) inconnu(s) d'Antigravity : {string.Join(", ", unknown)} ; disponibles : {string.Join(", ", status.Models)}", LogLevel.Error);
+                    $"aucun modèle utilisable pour : {string.Join(", ", unusable)} ; disponibles : {string.Join(", ", status.Models)}", LogLevel.Error);
                 return false;
             }
 
@@ -195,6 +197,11 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
 
         Directory.CreateDirectory(ctx.Paths.DataDir);
         await File.WriteAllTextAsync(ctx.Paths.Rules, puzzle.Statement, ct);
+
+        foreach (var path in cfg.Banc.Adversaires.Where(p => !File.Exists(p)))
+        {
+            throw new ConfigException($"banc.adversaires : « {path} » introuvable");
+        }
 
         var referee = cfg.Arene.Arbitre.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
         if (FindExecutable(referee) is null)

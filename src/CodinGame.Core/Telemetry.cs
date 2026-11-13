@@ -33,6 +33,7 @@ public static class Telemetry
     private static long _championWins;
     private static long _championGames;
     private static long _trialNumber;
+    private static double _benchWinRate = -1;
 
     static Telemetry()
     {
@@ -44,6 +45,9 @@ public static class Telemetry
                 ? 0.0
                 : (double)Interlocked.Read(ref _championWins) / Interlocked.Read(ref _championGames),
             description: "Taux de victoire du champion contre le boss, sur CodinGame");
+        Meter.CreateObservableGauge("farm.champion.victoires_banc",
+            () => Volatile.Read(ref _benchWinRate),
+            description: "Taux de victoire du champion contre les adversaires extérieurs (-1 = pas encore mesuré)");
         Meter.CreateObservableGauge("farm.essai.numero",
             () => Interlocked.Read(ref _trialNumber),
             description: "Numéro du dernier essai lancé");
@@ -58,4 +62,6 @@ public static class Telemetry
     }
 
     public static void SetTrialNumber(long value) => Interlocked.Exchange(ref _trialNumber, value);
+
+    public static void SetBenchWinRate(double value) => Volatile.Write(ref _benchWinRate, value);
 }

@@ -7,9 +7,10 @@
     "compilation": "g++ -std=c++20 -o {sortie} {source} -lm -lpthread"
   },
   "agents": {
-    "penseur": { "outil": "agy", "modele": "gemini-3.8-flash-high", "minutes_max": 20 },
-    "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-medium", "minutes_max": 20 },
-    "regard_neuf": { "outil": "agy", "modele": "gemini-3.8-flash-high", "minutes_max": 20 }
+    "penseur": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
+    "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
+    "regard_neuf": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
+    "blocage_minutes": 300
   },
   "arene": {
     "arbitre": "csbref",
@@ -43,5 +44,10 @@
   "contexte": {
     "essais_resumes": 15,
     "idees_rejetees": 60
+  },
+  "banc": {
+    "adversaires": [],
+    "parties_par_adversaire": 40,
+    "compilation": "g++ -std=c++20 -mavx2 -mfma -o {sortie} {source} -lm -lpthread"
   }
 }

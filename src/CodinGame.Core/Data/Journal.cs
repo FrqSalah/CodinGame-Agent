@@ -43,6 +43,10 @@ public sealed class Journal : IDisposable
                 essai_id INTEGER, jouee_le TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS champions (
                 id INTEGER PRIMARY KEY, bot_hash TEXT NOT NULL, essai_id INTEGER, depuis TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS parties_banc (
+                bot_hash TEXT NOT NULL, adversaire TEXT NOT NULL, graine INTEGER NOT NULL, siege INTEGER NOT NULL,
+                resultat TEXT NOT NULL, faute TEXT, jouee_le TEXT NOT NULL,
+                PRIMARY KEY (bot_hash, adversaire, graine, siege));
             CREATE TABLE IF NOT EXISTS orientations (
                 id INTEGER PRIMARY KEY, essai_id INTEGER, texte TEXT NOT NULL, cree_le TEXT NOT NULL);
             """);
@@ -191,6 +195,17 @@ public sealed class Journal : IDisposable
         Query("SELECT game_id, bot_hash, adversaire, options, resultat, faute FROM parties_api WHERE bot_hash = $b AND adversaire = $a",
             r => new ApiGameEntry(r.GetInt64(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetInt32(5) != 0),
             ("$b", botHash), ("$a", opponent));
+
+    public Dictionary<Arena.BenchCase, string> BenchResults(string botHash) =>
+        Query("SELECT adversaire, graine, siege, resultat FROM parties_banc WHERE bot_hash = $b",
+            r => (new Arena.BenchCase(r.GetString(0), r.GetInt64(1), r.GetInt32(2)), r.GetString(3)), ("$b", botHash))
+            .ToDictionary(x => x.Item1, x => x.Item2);
+
+    public void AddBenchGame(string botHash, Arena.BenchCase c, string result, string? fault) =>
+        Exec("""
+            INSERT OR REPLACE INTO parties_banc (bot_hash, adversaire, graine, siege, resultat, faute, jouee_le)
+            VALUES ($b, $a, $g, $s, $r, $f, $d)
+            """, ("$b", botHash), ("$a", c.Opponent), ("$g", c.Seed), ("$s", c.Seat), ("$r", result), ("$f", fault), ("$d", Now()));
 
     public void AddOrientation(long? trialId, string text) =>
         Exec("INSERT INTO orientations (essai_id, texte, cree_le) VALUES ($e, $t, $d)", ("$e", trialId), ("$t", text), ("$d", Now()));

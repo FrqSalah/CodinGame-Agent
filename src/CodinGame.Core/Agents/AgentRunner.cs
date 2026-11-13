@@ -8,10 +8,10 @@ using Microsoft.Extensions.Logging;
 
 namespace CodinGame.Core.Agents;
 
-public sealed record AgentRequest(string Role, AgentRole Settings, string WorkDirectory, string Prompt);
+public sealed record AgentRequest(string Role, AgentRole Settings, string WorkDirectory, string Prompt, TimeSpan? BlockFor = null);
 
 /// <param name="Diagnostic">Sortie technique de l'outil sans le texte de la réponse (statut, tokens, raison de fin).</param>
-public sealed record AgentResult(bool Success, string Response, string? Error, double Seconds, long Tokens, string Diagnostic = "");
+public sealed record AgentResult(bool Success, string Response, string? Error, double Seconds, long Tokens, string Diagnostic = "", string? Model = null);
 
 public enum AgentAvailability
 {
