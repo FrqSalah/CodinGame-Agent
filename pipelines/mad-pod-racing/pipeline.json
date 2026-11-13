@@ -8,8 +8,8 @@
   },
   "agents": {
     "penseur": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
-    "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
-    "regard_neuf": { "outil": "agy", "modele": "gemini-3.8-flash-high", "secours": ["gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
+    "codeur": { "outil": "agy", "modele": "gemini-3.8-flash-medium", "secours": ["gemini-3.8-flash-low"], "minutes_max": 20 },
+    "regard_neuf": { "outil": "agy", "modele": "claude-opus-4-6-thinking", "secours": ["gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"], "minutes_max": 20 },
     "blocage_minutes": 300
   },
   "arene": {
