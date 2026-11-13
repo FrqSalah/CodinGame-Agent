@@ -144,6 +144,24 @@ désormais prolongé une fois jusqu'à `arene.parties_prolongation` (1 000) ; le
 sont pas. Le même jour, l'extraction de l'idée a été corrigée : 8 idées étaient enregistrées
 vides, et le penseur reproposait des idées déjà jetées.
 
+Le 2026-11-13 :
+
+- **Chaîne de modèles** : chaque rôle utilise le modèle le plus fort de sa chaîne (`modele`, puis
+  `secours`). Un modèle à sa limite ou indisponible est écarté pendant `agents.blocage_minutes`,
+  blocage écrit dans `modeles-bloques.json` (conservé aux redémarrages), et l'appel repart avec le
+  suivant. `farm verifier` affiche les modèles écartés.
+- **Banc d'adversaires extérieurs** : le classement stagnait alors que les champions s'enchaînaient
+  (le bot ne progressait que contre ses propres versions). Après le duel, le candidat joue contre des
+  bots publiés par d'autres joueurs (`banc.adversaires`, construits dans l'image depuis
+  regismeyssonnier/MadPodRacingLegend, GPL-3, et inoryy/csb-ai-starter, MIT, à des versions figées,
+  jamais recopiés dans ce dépôt). Il est jeté s'il fait moins bien que le champion, situation par
+  situation. `farm banc` mesure le champion ; les résultats sont réutilisés par le juge.
+  Mesure du champion du 2026-11-13 (40 parties par adversaire) : 2 % contre le bot classé 245ᵉ
+  de Legend, 2 % contre le 353ᵉ, 50 % contre le 670ᵉ, 78 % contre le 770ᵉ, 95 % contre le bot de
+  départ d'inoryy. Banc retenu : 353ᵉ (cible), 670ᵉ (à égalité) et 770ᵉ (détecte les reculs).
+- **Bots isolés** : tous les bots tournent sous l'utilisateur `bot`, sans accès au token ni à la
+  connexion d'Antigravity (`FARM_BOT_USER`).
+
 Toujours non vérifié :
 
 - Ce que renvoie Antigravity quand le quota de l'abonnement est épuisé.

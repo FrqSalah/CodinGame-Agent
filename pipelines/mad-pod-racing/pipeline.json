@@ -46,7 +46,11 @@
     "idees_rejetees": 60
   },
   "banc": {
-    "adversaires": [],
+    "adversaires": [
+      "/app/sparring/madpod353thlegend.cpp",
+      "/app/sparring/MadPopdLegend670th.cpp",
+      "/app/sparring/maspodlegend770thbestalltime.cpp"
+    ],
     "parties_par_adversaire": 40,
     "compilation": "g++ -std=c++20 -mavx2 -mfma -o {sortie} {source} -lm -lpthread"
   }

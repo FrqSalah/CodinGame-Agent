@@ -35,6 +35,8 @@ plupart décrivent une conception plus vaste, mise de côté.
 7. **Le code de sortie d'Antigravity ne prouve rien** : il sort en 0 quand il échoue. Lire le
    statut JSON et vérifier ce qui a été produit. L'agent tourne sous l'utilisateur `agent`,
    dans un dossier qui ne contient que ce qu'il doit lire et le fichier qu'il peut modifier.
+   Les bots (des agents ou d'autres joueurs) tournent sous l'utilisateur `bot`, sans accès aux
+   secrets. Du code venu d'ailleurs n'est exécuté qu'avec l'accord de l'utilisateur.
 8. **Jamais `git reset --hard`**, ni dans le code, ni dans le déploiement.
 9. **Pousser sur `main` déploie** sur le VPS (après la CI). Ne pousser que du code testé.
 
@@ -44,7 +46,7 @@ Documents : liens relatifs, pas de LaTeX, chaque fichier daté et doté d'un sta
 
 ```
 src/CodinGame.Core/          logique : config, journal, API, moteur, duel, juge, agents, boucle
-src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel) ; bilan et
+src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel, rejuger, banc) ; bilan et
                              verifier ne modifient pas le journal
 src/CodinGame.ServiceDefaults/ télémétrie OTLP vers le dashboard Aspire
 src/CodinGame.AppHost/       lancement local avec le dashboard Aspire
