@@ -146,6 +146,16 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
     }
 
+    /// <summary>Juge un candidat écrit hors de la ferme, avec les mêmes étapes qu'un essai des agents.</summary>
+    public async Task<TrialVerdict> JudgeGivenAsync(string name, GivenCandidate candidate, CancellationToken ct)
+    {
+        var (ctx, journal) = Open(name);
+        using (journal)
+        {
+            return await new Trial(ctx, api, agents, log).RunAsync(ct, given: candidate);
+        }
+    }
+
     /// <summary>
     /// Ouvre la configuration et le journal d'une pipeline. Seule la boucle clôt les essais restés
     /// ouverts : une commande de consultation (bilan, vérification) lancée pendant un essai ne doit

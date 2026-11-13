@@ -1,6 +1,6 @@
 # Pipeline Mad Pod Racing — conception et état
 
-> **Statut** : en production sur le VPS · **Dernière mise à jour** : 2026-11-11
+> **Statut** : en production sur le VPS · **Dernière mise à jour** : 2026-11-13
 > Ce document décrit ce qui est construit. Il prime sur tout autre fichier de `.Agent/`.
 
 ## 1. Ce que fait la pipeline
@@ -65,7 +65,7 @@ boss Silver, puis 1er de Silver sur 75 102) ; il est en Gold depuis 02 h 17 UTC.
 | Agents | `Core/Agents/AgentRunner.cs` | `agy -p` ; statut JSON lu (le code de sortie ne prouve rien) ; durée bornée par nous ; utilisateur `agent` séparé. Une réponse vide est relancée (`boucle.relances_reponse_vide`) |
 | Essai | `Core/Pipeline/Trial.cs` | Enchaîne les étapes du §1 |
 | Ferme | `Core/Pipeline/Farm.cs` | Boucle continue, pauses automatiques (connexion, quota, ligue, configuration) |
-| Commandes | `Cli/Program.cs` | `servir`, `essai`, `verifier`, `bilan`, `duel <a> <b> [n]` |
+| Commandes | `Cli/Program.cs` | `servir`, `essai`, `verifier`, `bilan`, `duel <a> <b> [n]`, `rejuger <essai>`, `juger <source> <idée> [note]`, `banc` |
 | Lanceur local | `AppHost/` | Aspire : ferme + dashboard sur le poste de développement |
 
 Ajouter un jeu : un dossier dans `pipelines/` avec sa configuration, ses consignes, son bot
@@ -161,10 +161,15 @@ Le 2026-11-13 :
   départ d'inoryy. Banc retenu : 353ᵉ (cible), 670ᵉ (à égalité) et 770ᵉ (détecte les reculs).
 - **Bots isolés** : tous les bots tournent sous l'utilisateur `bot`, sans accès au token ni à la
   connexion d'Antigravity (`FARM_BOT_USER`).
+- **Poussée 200** : l'énoncé officiel (`regles.md`) autorise une poussée de 0 à 200, et un seul
+  BOOST partagé par les deux pods. L'essai 100 est passé de 100 à 200 : 30 V / 2 D contre le
+  champion, 113/120 au banc contre 52/120, soumis le soir même.
+- **Commande `juger`** : juge un bot écrit hors de la ferme (par exemple à la main) avec les mêmes
+  étapes et les mêmes seuils qu'un candidat des agents : duel, banc, confirmation, promotion et
+  soumission. C'est la seule voie pour soumettre un tel bot.
 
 Toujours non vérifié :
 
 - Ce que renvoie Antigravity quand le quota de l'abonnement est épuisé.
-- La poussée maximale en Gold : le moteur accepte jusqu'à 200, le bot reste à 100.
 - La confirmation sur CodinGame ne bloque que les fautes ; elle ne compare pas les scores
   (4 parties, trop peu pour trancher).

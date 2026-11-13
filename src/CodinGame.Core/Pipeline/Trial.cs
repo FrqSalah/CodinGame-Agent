@@ -20,6 +20,9 @@ public static class Verdicts
 
 public sealed record TrialVerdict(string Verdict, string Reason);
 
+/// <summary>Un candidat écrit hors de la ferme : son source, son idée en une ligne et sa note.</summary>
+public sealed record GivenCandidate(string Source, string Idea, string Note);
+
 /// <summary>
 /// Un essai : le penseur écrit une note, le codeur l'applique, le programme compile, fait
 /// jouer le candidat contre le champion dans le simulateur, puis confirme sur CodinGame.
@@ -39,7 +42,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     /// Numéro d'un essai dont le candidat est rejugé tel quel (duel, confirmation, promotion),
     /// sans repasser par le penseur ni le codeur. Le rejugement est un nouvel essai du journal.
     /// </param>
-    public async Task<TrialVerdict> RunAsync(CancellationToken ct, long? rejudge = null)
+    /// <param name="given">Candidat fourni de l'extérieur (commande <c>juger</c>), jugé de la même façon.</param>
+    public async Task<TrialVerdict> RunAsync(CancellationToken ct, long? rejudge = null, GivenCandidate? given = null)
     {
         var cfg = ctx.Config;
         var journal = ctx.Journal;
@@ -59,9 +63,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         DuelOutcome? duel = null;
         try
         {
-            (verdict, duel) = rejudge is { } of
-                ? await RejudgeStepsAsync(id, of, championHash, championSource, ct)
-                : await RunStepsAsync(id, dir, championHash, championSource, ct);
+            (verdict, duel) = given is not null
+                ? await JudgeGivenAsync(id, given, championHash, championSource, ct)
+                : rejudge is { } of
+                    ? await RejudgeStepsAsync(id, of, championHash, championSource, ct)
+                    : await RunStepsAsync(id, dir, championHash, championSource, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -74,7 +80,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         activity?.SetTag("verdict", verdict.Verdict);
         log.LogInformation("Essai {Essai} : {Verdict} — {Raison}", id, verdict.Verdict, verdict.Reason);
 
-        if (rejudge is null && verdict.Verdict != Verdicts.Kept && journal.NonKeptSinceLastChange() >= cfg.Boucle.RejetsAvantRegardNeuf)
+        if (rejudge is null && given is null && verdict.Verdict != Verdicts.Kept && journal.NonKeptSinceLastChange() >= cfg.Boucle.RejetsAvantRegardNeuf)
         {
             await FreshLookAsync(id, dir, championSource, ct);
         }
@@ -174,17 +180,27 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             throw new InvalidOperationException($"L'essai {of} n'a pas de candidat dans le journal.");
         }
 
-        journal.SetTrialNote(id, $"Rejugement de l'essai {of} : {idea}", note ?? "");
-        journal.SetTrialCandidate(id, hash!, 0);
-        log.LogInformation("Essai {Essai} : rejugement du candidat {Hash} de l'essai {Of}", id, hash, of);
+        return await JudgeGivenAsync(id, new GivenCandidate(candidate, $"Rejugement de l'essai {of} : {idea}", note ?? ""), championHash, championSource, ct);
+    }
+
+    /// <summary>Juge un candidat fourni tel quel : mêmes étapes et mêmes seuils que pour un candidat des agents.</summary>
+    private async Task<(TrialVerdict, DuelOutcome?)> JudgeGivenAsync(
+        long id, GivenCandidate given, string championHash, string championSource, CancellationToken ct)
+    {
+        var journal = ctx.Journal;
+        var hash = BotBuilder.Hash(given.Source);
+        journal.SaveBot(hash, given.Source);
+        journal.SetTrialNote(id, given.Idea, given.Note);
+        journal.SetTrialCandidate(id, hash, 0);
+        log.LogInformation("Essai {Essai} : candidat fourni {Hash} — {Idee}", id, hash, given.Idea);
         if (hash == championHash)
         {
             return (new TrialVerdict(Verdicts.Rejected, "ce candidat est déjà le champion"), null);
         }
 
-        var build = await ctx.Builder.BuildAsync(candidate, ct);
+        var build = await ctx.Builder.BuildAsync(given.Source, ct);
         return build.Success
-            ? await JudgeAsync(id, hash!, candidate, build.Executable!, championHash, championSource, ct)
+            ? await JudgeAsync(id, hash, given.Source, build.Executable!, championHash, championSource, ct)
             : (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
     }
 

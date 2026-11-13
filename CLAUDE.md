@@ -46,7 +46,7 @@ Documents : liens relatifs, pas de LaTeX, chaque fichier daté et doté d'un sta
 
 ```
 src/CodinGame.Core/          logique : config, journal, API, moteur, duel, juge, agents, boucle
-src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel, rejuger, banc) ; bilan et
+src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel, rejuger, juger, banc) ; bilan et
                              verifier ne modifient pas le journal
 src/CodinGame.ServiceDefaults/ télémétrie OTLP vers le dashboard Aspire
 src/CodinGame.AppHost/       lancement local avec le dashboard Aspire

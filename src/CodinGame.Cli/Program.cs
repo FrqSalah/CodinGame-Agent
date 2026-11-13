@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 //   bilan [pipeline]       résumé du journal
 //   duel <a> <b> [n]       duel local entre deux sources de bot, avec le moteur de la pipeline
 //   rejuger <essai>        rejuge le candidat d'un essai passé (duel, confirmation, promotion)
+//   juger <source> <idée> [note]  juge un bot écrit hors de la ferme, avec les mêmes étapes et seuils
 //   banc                   mesure le champion contre les adversaires extérieurs (résultats gardés au journal)
 
 var command = args.FirstOrDefault() ?? "servir";
@@ -57,6 +58,8 @@ try
         "duel" => await LocalDuel(),
         "banc" => await BenchChampion(),
         "rejuger" when rest.Length > 0 => (await farm.RejudgeAsync(paths.PipelineNames().First(), long.Parse(rest[0], CultureInfo.InvariantCulture), ct)).Verdict == Verdicts.Kept ? 0 : 2,
+        "juger" when rest.Length > 1 => (await farm.JudgeGivenAsync(paths.PipelineNames().First(),
+            new GivenCandidate(await File.ReadAllTextAsync(rest[0], ct), rest[1], rest.Length > 2 ? await File.ReadAllTextAsync(rest[2], ct) : rest[1]), ct)).Verdict == Verdicts.Kept ? 0 : 2,
         _ => Usage(),
     };
 }
@@ -226,6 +229,6 @@ static string Clip(string? s, int max) => s is null ? "" : s.Length <= max ? s :
 
 static int Usage()
 {
-    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai> | banc]");
+    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai> | juger <source> <idée> [note] | banc]");
     return 64;
 }
