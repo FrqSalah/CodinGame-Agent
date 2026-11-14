@@ -102,8 +102,12 @@ déposé là remplace le gabarit livré.
 pour l'instant. `farm page <fichier.html>` l'écrit dans un fichier.
 
 **Accès à distance** : par Tailscale, le réseau privé du compte de l'utilisateur. Le VPS
-(`ferme-codingame`) publie la page et le dashboard sur ce réseau avec `tailscale serve` ; rien
-n'est ouvert sur Internet.
+(`ferme-codingame`) publie sur ce réseau avec `tailscale serve`, configuration conservée aux
+redémarrages ; rien n'est ouvert sur Internet. Les ports 80 et 443 restent à nginx (autres
+services de l'utilisateur).
+
+- page de suivi : `https://ferme-codingame.tail69b8bd.ts.net:8443`
+- dashboard Aspire : `https://ferme-codingame.tail69b8bd.ts.net:10000`
 
 ```
 # Sans Tailscale : tunnel SSH, puis http://localhost:18890 (page) et http://localhost:18888 (dashboard)
