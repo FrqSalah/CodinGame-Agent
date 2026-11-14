@@ -22,6 +22,9 @@ public sealed record PuzzleInfo(string League, int PlayersMin, int PlayersMax, I
 
 public sealed record TestGameResult(GameLog? Log, string? Failure);
 
+/// <summary>Place du bot soumis : rang mondial, score, ligue et rang dans la ligue.</summary>
+public sealed record RankingSnapshot(int Rank, int Total, double Score, string League, int LeagueRank, int LeagueTotal, int Percentage);
+
 /// <summary>
 /// Seul point d'accès à l'API publique CodinGame. Le token est relu à chaque appel et
 /// n'apparaît jamais dans un journal ni une erreur. Une seule partie de test à la fois ;
@@ -121,6 +124,22 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         var r = await SendAsync(HttpMethod.Post, $"/puzzles/{puzzle}/submissions",
             new JsonObject { ["language"] = language, ["code"] = code }, ct);
         return r.GetProperty("submission_id").GetInt64();
+    }
+
+    /// <summary>Classement actuel du bot soumis, ou null s'il n'y en a pas encore.</summary>
+    public async Task<RankingSnapshot?> GetRankingAsync(string puzzle, CancellationToken ct)
+    {
+        var p = await SendAsync(HttpMethod.Get, $"/puzzles/{puzzle}/progress", null, ct);
+        if (!p.TryGetProperty("rank", out var rank) || rank.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        int Int(string name) => p.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+        return new RankingSnapshot(
+            rank.GetInt32(), Int("total"),
+            p.TryGetProperty("score", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDouble() : 0,
+            Text(p, "league") ?? "", Int("league_rank"), Int("league_total"), Int("percentage"));
     }
 
     /// <summary>Parties de test restantes sur la fenêtre la plus contraignante, ou null si inconnu.</summary>

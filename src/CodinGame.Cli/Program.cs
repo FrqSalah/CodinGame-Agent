@@ -4,7 +4,12 @@ using CodinGame.Core.Agents;
 using CodinGame.Core.Arena;
 using CodinGame.Core.CodinGameApi;
 using CodinGame.Core.Config;
+using CodinGame.Core.Data;
 using CodinGame.Core.Pipeline;
+using CodinGame.Core.Report;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,6 +23,7 @@ using Microsoft.Extensions.Logging;
 //   rejuger <essai>        rejuge le candidat d'un essai passé (duel, confirmation, promotion)
 //   juger <source> <idée> [note]  juge un bot écrit hors de la ferme, avec les mêmes étapes et seuils
 //   banc                   mesure le champion contre les adversaires extérieurs (résultats gardés au journal)
+//   page <fichier.html>    écrit la page de suivi dans un fichier (servie en direct par « servir » si FARM_WEB_URL)
 
 var command = args.FirstOrDefault() ?? "servir";
 var rest = args.Skip(1).ToArray();
@@ -57,6 +63,7 @@ try
         "bilan" => Report(),
         "duel" => await LocalDuel(),
         "banc" => await BenchChampion(),
+        "page" when rest.Length > 0 => WritePage(rest[0]),
         "rejuger" when rest.Length > 0 => (await farm.RejudgeAsync(paths.PipelineNames().First(), long.Parse(rest[0], CultureInfo.InvariantCulture), ct)).Verdict == Verdicts.Kept ? 0 : 2,
         "juger" when rest.Length > 1 => (await farm.JudgeGivenAsync(paths.PipelineNames().First(),
             new GivenCandidate(await File.ReadAllTextAsync(rest[0], ct), rest[1], rest.Length > 2 ? await File.ReadAllTextAsync(rest[2], ct) : rest[1]), ct)).Verdict == Verdicts.Kept ? 0 : 2,
@@ -88,8 +95,62 @@ async Task<int> Serve()
         await host.Services.GetRequiredService<IAgentRunner>().GrantAsync($"/home/{user}/.gemini", ct);
     }
 
-    await farm.RunForeverAsync(ct);
+    // Page de suivi : seulement si une adresse d'écoute est donnée (FARM_WEB_URL, dans le compose).
+    WebApplication? web = null;
+    if (Environment.GetEnvironmentVariable("FARM_WEB_URL") is { Length: > 0 } url)
+    {
+        var wb = WebApplication.CreateSlimBuilder();
+        wb.WebHost.UseUrls(url);
+        web = wb.Build();
+        web.MapGet("/", () => TypedResults.Content(RenderStatus(), "text/html; charset=utf-8"));
+        await web.StartAsync(ct);
+        log.LogInformation("Page de suivi servie sur {Url}", url);
+    }
+
+    var rankings = farm.RecordRankingsForeverAsync(ct);
+    try
+    {
+        await farm.RunForeverAsync(ct);
+    }
+    finally
+    {
+        if (web is not null)
+        {
+            await web.StopAsync(CancellationToken.None);
+        }
+    }
+
+    await rankings.ContinueWith(_ => { }, TaskScheduler.Default);
     return 0;
+}
+
+int WritePage(string file)
+{
+    File.WriteAllText(file, RenderStatus());
+    Console.WriteLine($"Page de suivi écrite dans {file}");
+    return 0;
+}
+
+string RenderStatus()
+{
+    var name = paths.PipelineNames().First();
+    var p = paths.Pipeline(name);
+    using var journal = new Journal(p.Journal);
+    var champion = journal.ChampionHash();
+    var blocked = host.Services.GetRequiredService<IAgentRunner>() is FallbackAgentRunner chain
+        ? chain.Blocked()
+        : new Dictionary<string, DateTime>();
+    return StatusPage.Render(new StatusData(
+        name,
+        journal.Rankings(),
+        journal.Champions(),
+        journal.AllTrials(),
+        journal.CurrentTrial(),
+        champion is null ? [] : journal.BenchSummary(champion),
+        blocked,
+        journal.TokenAverages(10),
+        File.Exists(p.Orientation) ? File.ReadAllText(p.Orientation) : "",
+        DateTime.UtcNow));
 }
 
 async Task<int> RunTrial() => await farm.RunOnceAsync(PipelineArg(), ct) ? 0 : 2;
@@ -229,6 +290,6 @@ static string Clip(string? s, int max) => s is null ? "" : s.Length <= max ? s :
 
 static int Usage()
 {
-    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai> | juger <source> <idée> [note] | banc]");
+    Console.Error.WriteLine("Usage : farm [servir | essai | verifier | bilan | duel <a> <b> [n] | rejuger <essai> | juger <source> <idée> [note] | banc | page <fichier.html>]");
     return 64;
 }

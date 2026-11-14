@@ -136,6 +136,39 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
     }
 
+    /// <summary>
+    /// Relève le classement de chaque pipeline toutes les <c>api.releve_classement_minutes</c> et
+    /// le garde au journal, pour suivre la progression dans le temps.
+    /// </summary>
+    public async Task RecordRankingsForeverAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var wait = TimeSpan.FromMinutes(10);
+            foreach (var name in paths.PipelineNames())
+            {
+                try
+                {
+                    var p = paths.Pipeline(name);
+                    var cfg = ConfigLoader.Load(p.ConfigSeed, p.ConfigData);
+                    wait = TimeSpan.FromMinutes(Math.Max(1, cfg.Api.ReleveClassementMinutes));
+                    if (await api.GetRankingAsync(cfg.Jeu, ct) is { } ranking)
+                    {
+                        using var journal = new Journal(p.Journal);
+                        journal.AddRanking(ranking);
+                        log.LogInformation("Pipeline {Pipeline} : classement {Rang}/{Total}, score {Score}", name, ranking.Rank, ranking.Total, ranking.Score);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.LogWarning("Pipeline {Pipeline} : relevé du classement impossible : {Erreur}", name, ex.Message);
+                }
+            }
+
+            await Task.Delay(wait, ct);
+        }
+    }
+
     /// <summary>Rejuge le candidat d'un essai passé, sans clore l'essai que la boucle mène peut-être en parallèle.</summary>
     public async Task<TrialVerdict> RejudgeAsync(string name, long trialId, CancellationToken ct)
     {

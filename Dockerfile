@@ -35,7 +35,7 @@ RUN dotnet test --project tests/CodinGame.Tests/CodinGame.Tests.csproj -c Releas
 RUN dotnet publish src/CodinGame.Cli/CodinGame.Cli.csproj -c Release -o /app
 
 # ---- Exécution ----
-FROM mcr.microsoft.com/dotnet/runtime:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
       g++ ca-certificates curl dbus dbus-x11 gnome-keyring libsecret-tools util-linux \
  && rm -rf /var/lib/apt/lists/*

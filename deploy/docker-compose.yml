@@ -2,7 +2,8 @@
 #   /opt/codingame-farm/data            journal, configuration modifiable, essais
 #   /opt/codingame-farm/agent-home      connexion Antigravity (trousseau)
 #   /opt/codingame-farm/secrets/...     token CodinGame, en lecture seule
-# Dashboard : http://localhost:18888 à travers un tunnel SSH (jamais exposé sur Internet).
+# Dashboard (18888) et page de suivi (18890) : écoutent sur le VPS seulement. Accès à distance par
+# le réseau privé Tailscale du compte de l'utilisateur (tailscale serve), jamais exposés sur Internet.
 # Ressources visibles : « farm » (essais, journaux, métriques) et « vps » (état de la machine).
 name: codingame-farm
 
@@ -17,6 +18,9 @@ services:
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
       OTEL_SERVICE_NAME: farm
+      FARM_WEB_URL: http://0.0.0.0:18890
+    ports:
+      - "127.0.0.1:18890:18890"
     volumes:
       - /opt/codingame-farm/data:/data
       - /opt/codingame-farm/agent-home:/home/agent

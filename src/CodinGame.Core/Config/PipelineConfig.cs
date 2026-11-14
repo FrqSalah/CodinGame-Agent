@@ -32,7 +32,7 @@ public sealed record ArenaSettings(
     int PartiesProlongation,
     double LlrProlongation);
 
-public sealed record ApiSettings(int PartiesConfirmation, string Adversaire, bool SoumettreChampions);
+public sealed record ApiSettings(int PartiesConfirmation, string Adversaire, bool SoumettreChampions, int ReleveClassementMinutes);
 
 public sealed record LoopSettings(
     bool Actif,

@@ -30,7 +30,8 @@
   "api": {
     "parties_confirmation": 4,
     "adversaire": "default",
-    "soumettre_champions": true
+    "soumettre_champions": true,
+    "releve_classement_minutes": 60
   },
   "boucle": {
     "actif": true,

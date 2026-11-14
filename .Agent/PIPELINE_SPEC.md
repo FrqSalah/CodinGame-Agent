@@ -65,7 +65,8 @@ boss Silver, puis 1er de Silver sur 75 102) ; il est en Gold depuis 02 h 17 UTC.
 | Agents | `Core/Agents/AgentRunner.cs` | `agy -p` ; statut JSON lu (le code de sortie ne prouve rien) ; durée bornée par nous ; utilisateur `agent` séparé. Une réponse vide est relancée (`boucle.relances_reponse_vide`) |
 | Essai | `Core/Pipeline/Trial.cs` | Enchaîne les étapes du §1 |
 | Ferme | `Core/Pipeline/Farm.cs` | Boucle continue, pauses automatiques (connexion, quota, ligue, configuration) |
-| Commandes | `Cli/Program.cs` | `servir`, `essai`, `verifier`, `bilan`, `duel <a> <b> [n]`, `rejuger <essai>`, `juger <source> <idée> [note]`, `banc` |
+| Commandes | `Cli/Program.cs` | `servir`, `essai`, `verifier`, `bilan`, `duel <a> <b> [n]`, `rejuger <essai>`, `juger <source> <idée> [note]`, `banc`, `page <fichier>` |
+| Page de suivi | `Core/Report/StatusPage.cs` | HTML sans script : classement dans le temps, champion, banc, essais, agents |
 | Lanceur local | `AppHost/` | Aspire : ferme + dashboard sur le poste de développement |
 
 Ajouter un jeu : un dossier dans `pipelines/` avec sa configuration, ses consignes, son bot
@@ -96,7 +97,18 @@ déposé là remplace le gabarit livré.
 
 ## 7. Exploitation
 
+**Page de suivi** (servie par `farm servir`, port 18890) : classement relevé toutes les
+`api.releve_classement_minutes` et sa courbe, champion et banc, essais, agents. Lecture seule
+pour l'instant. `farm page <fichier.html>` l'écrit dans un fichier.
+
+**Accès à distance** : par Tailscale, le réseau privé du compte de l'utilisateur. Le VPS
+(`ferme-codingame`) publie la page et le dashboard sur ce réseau avec `tailscale serve` ; rien
+n'est ouvert sur Internet.
+
 ```
+# Sans Tailscale : tunnel SSH, puis http://localhost:18890 (page) et http://localhost:18888 (dashboard)
+ssh -L 18890:127.0.0.1:18890 -L 18888:127.0.0.1:18888 ovh-vps
+
 # Dashboard (depuis le PC) puis ouvrir http://localhost:18888
 # Ressources : « farm » (essais, journaux, métriques farm.*) et « vps » (métriques system.*)
 ssh -L 18888:127.0.0.1:18888 ovh-vps

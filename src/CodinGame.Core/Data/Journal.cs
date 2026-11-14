@@ -7,6 +7,10 @@ public sealed record TrialSummary(
     long Id, string Start, string? Verdict, string? Reason, string? Idea,
     int Wins, int Losses, int Draws, string? Penseur, string? Codeur);
 
+public sealed record RankingEntry(DateTime At, int Rank, int Total, double Score, string League, int LeagueRank, int LeagueTotal, int Percentage);
+
+public sealed record ChampionEntry(long Id, string Hash, long? TrialId, DateTime Since);
+
 public sealed record ApiGameEntry(long GameId, string BotHash, string Opponent, string Options, string Outcome, bool Fault);
 
 /// <summary>
@@ -49,6 +53,10 @@ public sealed class Journal : IDisposable
                 PRIMARY KEY (bot_hash, adversaire, graine, siege));
             CREATE TABLE IF NOT EXISTS orientations (
                 id INTEGER PRIMARY KEY, essai_id INTEGER, texte TEXT NOT NULL, cree_le TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS classement (
+                releve_le TEXT PRIMARY KEY, rang INTEGER NOT NULL, total INTEGER NOT NULL, score REAL NOT NULL,
+                ligue TEXT NOT NULL, rang_ligue INTEGER NOT NULL, total_ligue INTEGER NOT NULL,
+                pourcentage INTEGER NOT NULL);
             """);
 
         // Colonnes ajoutées après la mise en service : ajoutées aux journaux existants.
@@ -209,6 +217,37 @@ public sealed class Journal : IDisposable
 
     public void AddOrientation(long? trialId, string text) =>
         Exec("INSERT INTO orientations (essai_id, texte, cree_le) VALUES ($e, $t, $d)", ("$e", trialId), ("$t", text), ("$d", Now()));
+
+    // ---- Classement et historique, pour la page de suivi ----
+
+    public void AddRanking(CodinGameApi.RankingSnapshot r) =>
+        Exec("""
+            INSERT OR REPLACE INTO classement (releve_le, rang, total, score, ligue, rang_ligue, total_ligue, pourcentage)
+            VALUES ($d, $r, $t, $s, $l, $rl, $tl, $p)
+            """, ("$d", Now()), ("$r", r.Rank), ("$t", r.Total), ("$s", r.Score), ("$l", r.League),
+            ("$rl", r.LeagueRank), ("$tl", r.LeagueTotal), ("$p", r.Percentage));
+
+    public IReadOnlyList<RankingEntry> Rankings() =>
+        Query("SELECT releve_le, rang, total, score, ligue, rang_ligue, total_ligue, pourcentage FROM classement ORDER BY releve_le",
+            r => new RankingEntry(Date(r.GetString(0)), r.GetInt32(1), r.GetInt32(2), r.GetDouble(3), r.GetString(4),
+                r.GetInt32(5), r.GetInt32(6), r.GetInt32(7)));
+
+    public IReadOnlyList<ChampionEntry> Champions() =>
+        Query("SELECT id, bot_hash, essai_id, depuis FROM champions ORDER BY id",
+            r => new ChampionEntry(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetInt64(2), Date(r.GetString(3))));
+
+    /// <summary>Victoires du bot contre chaque adversaire du banc : (adversaire, victoires, parties).</summary>
+    public IReadOnlyList<(string Opponent, int Wins, int Games)> BenchSummary(string botHash) =>
+        Query("SELECT adversaire, SUM(resultat = $w), COUNT(*) FROM parties_banc WHERE bot_hash = $b GROUP BY adversaire ORDER BY adversaire",
+            r => (r.GetString(0), r.GetInt32(1), r.GetInt32(2)), ("$b", botHash), ("$w", Arena.Results.Win));
+
+    /// <summary>L'essai en cours, s'il y en a un : numéro, début et idée (vide tant que le penseur n'a pas répondu).</summary>
+    public (long Id, DateTime Start, string? Idea)? CurrentTrial() =>
+        Query("SELECT id, debut, idee FROM essais WHERE fin IS NULL ORDER BY id DESC LIMIT 1",
+            r => ((long Id, DateTime Start, string? Idea)?)(r.GetInt64(0), Date(r.GetString(1)), Str(r, 2))).FirstOrDefault();
+
+    private static DateTime Date(string s) =>
+        DateTime.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 
     public void Dispose() => _db.Dispose();
 
