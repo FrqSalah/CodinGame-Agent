@@ -149,7 +149,10 @@ Le 2026-11-13 :
 - **Chaîne de modèles** : chaque rôle utilise le modèle le plus fort de sa chaîne (`modele`, puis
   `secours`). Un modèle à sa limite ou indisponible est écarté pendant `agents.blocage_minutes`,
   blocage écrit dans `modeles-bloques.json` (conservé aux redémarrages), et l'appel repart avec le
-  suivant. `farm verifier` affiche les modèles écartés.
+  suivant. `farm verifier` affiche les modèles écartés. Depuis le 2026-11-14, une réponse
+  inachevée (coupée à la limite de tokens de sortie, ou arrêtée par le délai) fait aussi
+  repartir l'appel avec le modèle suivant, sans bloquer le premier : trois essais de suite
+  avaient échoué ainsi avec le penseur.
 - **Banc d'adversaires extérieurs** : le classement stagnait alors que les champions s'enchaînaient
   (le bot ne progressait que contre ses propres versions). Après le duel, le candidat joue contre des
   bots publiés par d'autres joueurs (`banc.adversaires`, construits dans l'image depuis

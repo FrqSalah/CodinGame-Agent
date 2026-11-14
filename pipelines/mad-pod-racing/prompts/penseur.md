@@ -1,5 +1,9 @@
 # Ta tâche : proposer UNE amélioration du bot
 
+**Ta réponse fait au plus 400 mots.** Une réponse plus longue est coupée et l'essai est perdu.
+Réfléchis autant qu'il le faut, mais n'écris que la note finale : pas de raisonnement, pas de
+code complet, pas de variantes.
+
 Tu es le stratège d'une boucle qui améliore un bot pour le jeu CodinGame « {jeu} »
 (ligue {ligue}), écrit en {langage} dans le fichier {fichier}.
 

@@ -34,6 +34,16 @@ public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPat
             }
 
             var result = await inner.RunAsync(request with { Settings = request.Settings with { Modele = model } }, ct);
+            if (!result.Success && IsOverrun(result.Error))
+            {
+                // Réponse coupée ou trop longue : le modèle reste utilisable, mais cet appel est
+                // retenté avec le suivant de la chaîne, sans le bloquer.
+                log.LogWarning("Modèle {Modele} : réponse inachevée ({Raison}), appel retenté avec le suivant de la chaîne",
+                    model, result.Error);
+                last = result;
+                continue;
+            }
+
             if (result.Success || !IsExhausted(result.Error))
             {
                 if (model != request.Settings.Modele)
@@ -54,7 +64,7 @@ public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPat
         var blocked = string.Join(", ", Blocked().Select(b => $"{b.Key} jusqu'à {b.Value:HH:mm} UTC"));
         return last is null
             ? new AgentResult(false, "", $"aucun modèle utilisable dans la chaîne ({blocked})", 0, 0)
-            : last with { Error = $"tous les modèles de la chaîne sont à leur limite ({blocked}) ; dernière erreur : {last.Error}" };
+            : last with { Error = $"aucun modèle de la chaîne n'a abouti (écartés : {(blocked.Length > 0 ? blocked : "aucun")}) ; dernière erreur : {last.Error}" };
     }
 
     public async Task<AgentStatus> CheckAsync(CancellationToken ct)
@@ -84,7 +94,13 @@ public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPat
     /// de tokens d'une seule réponse n'en est pas un : le modèle reste utilisable.
     /// </summary>
     internal static bool IsExhausted(string? error) =>
-        error is not null && !error.Contains("output token", StringComparison.OrdinalIgnoreCase) && Exhausted().IsMatch(error);
+        error is not null && !IsOverrun(error) && Exhausted().IsMatch(error);
+
+    /// <summary>
+    /// L'erreur dit-elle que la réponse est inachevée : coupée à la limite de tokens de sortie, ou
+    /// arrêtée par le délai ? Le modèle n'est pas en cause durablement ; seul cet appel change de modèle.
+    /// </summary>
+    internal static bool IsOverrun(string? error) => error is not null && Overrun().IsMatch(error);
 
     private DateTime? BlockedUntil(string model)
     {
@@ -122,4 +138,7 @@ public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPat
     [GeneratedRegex(@"quota|exhaust|rate.?limit|too many requests|\b429\b|resource.?exhausted|capacity|overload|unavailable|not available|unknown model|invalid model|credits|usage limit|limit reached|try again later",
         RegexOptions.IgnoreCase)]
     private static partial Regex Exhausted();
+
+    [GeneratedRegex(@"output token|cut off|print timeout|response is partial|durée maximale dépassée", RegexOptions.IgnoreCase)]
+    private static partial Regex Overrun();
 }
