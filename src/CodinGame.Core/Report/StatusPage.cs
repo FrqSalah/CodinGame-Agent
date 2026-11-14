@@ -168,7 +168,7 @@ public static class StatusPage
     /// <summary>Courbe du score, avec un trait à chaque nouveau champion.</summary>
     private static string ScoreChart(IReadOnlyList<RankingEntry> rankings, IReadOnlyList<ChampionEntry> champions)
     {
-        const double W = 800, H = 220, L = 44, R = 12, T = 12, B = 28;
+        const double W = 800, H = 230, L = 72, R = 12, T = 22, B = 34;
         var t0 = rankings[0].At;
         var t1 = rankings[^1].At;
         var span = Math.Max(1, (t1 - t0).TotalMinutes);
@@ -278,9 +278,27 @@ public static class StatusPage
         .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--muted); margin-right:8px; }
         .dot.live { background:var(--good); box-shadow:0 0 0 3px var(--good-bg); }
         code { font:13px ui-monospace, monospace; }
+        td, summary { overflow-wrap:anywhere; }
         @media (max-width: 720px) {
-          section.grid, .tiles { grid-template-columns:1fr; }
-          .trials td:nth-child(2), .trials th:nth-child(2) { display:none; }
+          body { font-size:14px; }
+          header { padding-top:16px; } h1 { font-size:19px; }
+          section, .card { padding:14px; border-radius:10px; margin:12px 0; }
+          section.grid { grid-template-columns:1fr; gap:0; }
+          /* Chiffres clés : le rang en entier, score et ligue côte à côte. */
+          .tiles { grid-template-columns:1fr 1fr; gap:8px; }
+          .tiles .tile:first-child { grid-column:1 / -1; }
+          .tile { padding:10px 12px; } .tile .value { font-size:24px; } .tile .note { font-size:12px; }
+          /* La courbe est réduite à l'écran : ses textes sont agrandis d'autant. */
+          .chart .axis { font-size:24px; } .chart .line { stroke-width:4; } .chart .pt { r:5; }
+          .bar { width:36px; }
+          /* Essais : une fiche par essai au lieu d'un tableau. */
+          .trials thead { display:none; }
+          .trials tr { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:6px 10px;
+                       padding:10px 0; border-bottom:1px solid var(--line); }
+          .trials td { border:0; padding:0; }
+          .trials td:nth-child(2) { display:none; }
+          .trials td:nth-child(4) { justify-self:end; color:var(--muted); }
+          .trials td:nth-child(5) { grid-column:1 / -1; }
         }
         """;
 }
