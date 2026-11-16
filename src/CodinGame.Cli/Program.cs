@@ -101,6 +101,7 @@ async Task<int> Serve()
     {
         var wb = WebApplication.CreateSlimBuilder();
         wb.WebHost.UseUrls(url);
+        wb.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning); // pas cinq lignes par visite
         web = wb.Build();
         web.MapGet("/", () => TypedResults.Content(RenderStatus(), "text/html; charset=utf-8"));
         await web.StartAsync(ct);
