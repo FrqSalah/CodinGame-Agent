@@ -30,6 +30,8 @@
   "api": {
     "parties_confirmation": 4,
     "adversaire": "default",
+    "confirmation_joueurs": 6,
+    "confirmation_rangs_au_dessus": 60,
     "soumettre_champions": true,
     "releve_classement_minutes": 60
   },
@@ -47,11 +49,7 @@
     "idees_rejetees": 60
   },
   "banc": {
-    "adversaires": [
-      "/app/sparring/madpod353thlegend.cpp",
-      "/app/sparring/MadPopdLegend670th.cpp",
-      "/app/sparring/maspodlegend770thbestalltime.cpp"
-    ],
+    "adversaires": [],
     "parties_par_adversaire": 40,
     "compilation": "g++ -std=c++20 -mavx2 -mfma -o {sortie} {source} -lm -lpthread"
   }

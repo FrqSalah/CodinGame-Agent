@@ -126,6 +126,18 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         return r.GetProperty("submission_id").GetInt64();
     }
 
+    /// <summary>Joueurs de notre ligue contre qui des parties de test sont permises, avec leur rang.</summary>
+    public async Task<IReadOnlyList<(string AgentId, int Rank)>> GetOpponentsAsync(string puzzle, CancellationToken ct)
+    {
+        var r = await SendAsync(HttpMethod.Get, $"/puzzles/{puzzle}/opponents", null, ct);
+        return r.TryGetProperty("opponents", out var list)
+            ? list.EnumerateArray()
+                .Where(o => o.TryGetProperty("rank", out var rank) && rank.ValueKind == JsonValueKind.Number)
+                .Select(o => (o.GetProperty("agent_id").ToString(), o.GetProperty("rank").GetInt32()))
+                .ToList()
+            : [];
+    }
+
     /// <summary>Classement actuel du bot soumis, ou null s'il n'y en a pas encore.</summary>
     public async Task<RankingSnapshot?> GetRankingAsync(string puzzle, CancellationToken ct)
     {

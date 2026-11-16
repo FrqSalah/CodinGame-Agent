@@ -32,7 +32,17 @@ public sealed record ArenaSettings(
     int PartiesProlongation,
     double LlrProlongation);
 
-public sealed record ApiSettings(int PartiesConfirmation, string Adversaire, bool SoumettreChampions, int ReleveClassementMinutes);
+/// <param name="PartiesConfirmation">Parties de confirmation par adversaire, pour le candidat comme pour le champion.</param>
+/// <param name="Adversaire">Adversaire de confirmation quand <paramref name="ConfirmationJoueurs"/> vaut 0.</param>
+/// <param name="ConfirmationJoueurs">Nombre de vrais joueurs, classés au-dessus de nous, contre qui confirmer (0 : <paramref name="Adversaire"/> seul).</param>
+/// <param name="ConfirmationRangsAuDessus">Ces joueurs sont pris au plus à ce nombre de rangs au-dessus du nôtre.</param>
+public sealed record ApiSettings(
+    int PartiesConfirmation, string Adversaire, int ConfirmationJoueurs, int ConfirmationRangsAuDessus,
+    bool SoumettreChampions, int ReleveClassementMinutes)
+{
+    /// <summary>Parties de test que coûte la confirmation d'un candidat, champion compris.</summary>
+    public int ConfirmationCost => 2 * PartiesConfirmation * Math.Max(1, ConfirmationJoueurs);
+}
 
 public sealed record LoopSettings(
     bool Actif,
@@ -114,6 +124,9 @@ public sealed record PipelineConfig(
         Check(Arene.Alpha is > 0 and < 0.5 && Arene.Beta is > 0 and < 0.5, "arene.alpha / beta", "entre 0 et 0,5");
         Check(Api.PartiesConfirmation >= 0, "api.parties_confirmation", "positif ou nul");
         Check(!string.IsNullOrWhiteSpace(Api.Adversaire), "api.adversaire", "obligatoire (« boss » ou un agent_id)");
+        Check(Api.ConfirmationJoueurs >= 0, "api.confirmation_joueurs", "positif ou nul");
+        Check(Api.ConfirmationJoueurs == 0 || Api.ConfirmationRangsAuDessus >= Api.ConfirmationJoueurs,
+            "api.confirmation_rangs_au_dessus", "au moins api.confirmation_joueurs");
         Check(Boucle.EssaisParJour >= 0, "boucle.essais_par_jour", "positif ou nul");
         Check(Boucle.RejetsAvantRegardNeuf >= 1, "boucle.rejets_avant_regard_neuf", "au moins 1");
         Check(Boucle.CorrectionsCompilationMax >= 0, "boucle.corrections_compilation_max", "positif ou nul");

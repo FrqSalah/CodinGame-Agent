@@ -108,7 +108,7 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                 return false;
             }
 
-            var needed = 2 * cfg.Api.PartiesConfirmation;
+            var needed = cfg.Api.ConfirmationCost;
             if (needed > 0 && await api.TestGamesLeftAsync(cfg.Jeu, ct) is { } left && left < needed)
             {
                 Pause(name, TimeSpan.FromMinutes(30), $"seulement {left} parties de test CodinGame restantes (il en faut {needed})", LogLevel.Information);

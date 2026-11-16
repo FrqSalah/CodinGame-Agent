@@ -267,29 +267,45 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             }
         }
 
-        // 6. Confirmation sur CodinGame : le vrai moteur, le vrai compilateur, les vraies limites de temps.
-        //    Le candidat rejoue exactement les circuits des parties de confirmation du champion.
+        // 6. Confirmation sur CodinGame : le vrai moteur, le vrai compilateur, les vraies limites de temps,
+        //    contre de vrais joueurs classés juste au-dessus de nous (api.confirmation_joueurs). Le candidat
+        //    rejoue exactement les circuits du champion contre chaque adversaire ; il est jeté s'il perd
+        //    plus de ces parties que le champion n'en perd de son côté.
         var k = cfg.Api.PartiesConfirmation;
         if (k > 0)
         {
             using (Telemetry.Source.StartActivity("confirmation"))
             {
-                var known = journal.ApiGames(championHash, cfg.Api.Adversaire).Take(k).ToList();
-                var championGames = known.Concat(await PlayApiGamesAsync(championHash, championSource,
-                    Enumerable.Repeat<string?>(null, k - known.Count).ToList(), null, ct)).ToList();
-                var candidateGames = await PlayApiGamesAsync(hash, candidate, championGames.Select(g => (string?)g.Options).ToList(), id, ct);
+                var opponents = await ConfirmationOpponentsAsync(ct);
+                var championGames = new List<ApiGameEntry>();
+                var candidateGames = new List<ApiGameEntry>();
+                foreach (var opponent in opponents)
+                {
+                    var known = journal.ApiGames(championHash, opponent).Take(k).ToList();
+                    var champion = known.Concat(await PlayApiGamesAsync(championHash, championSource, opponent,
+                        Enumerable.Repeat<string?>(null, k - known.Count).ToList(), null, ct)).ToList();
+                    championGames.AddRange(champion);
+                    candidateGames.AddRange(await PlayApiGamesAsync(hash, candidate, opponent, champion.Select(g => (string?)g.Options).ToList(), id, ct));
+                }
+
                 var faults = candidateGames.Count(g => g.Fault);
-                var candWins = candidateGames.Count(g => g.Outcome == nameof(Outcome.Win));
-                var champWins = championGames.Count(g => g.Outcome == nameof(Outcome.Win));
-                log.LogInformation("Essai {Essai} : sur CodinGame contre {Adversaire}, candidat {Cand}/{N}, champion {Champ}/{N}",
-                    id, cfg.Api.Adversaire, candWins, k, champWins, k);
+                var (plus, minus, candWins, champWins) = Confirmation.Compare(championGames, candidateGames);
+                var n = candidateGames.Count;
+                var who = cfg.Api.ConfirmationJoueurs > 0 ? $"{opponents.Count} joueurs classés au-dessus" : cfg.Api.Adversaire;
+                var line = $"sur CodinGame contre {who} : candidat {candWins}/{n}, champion {champWins}/{n} (+{plus} / -{minus})";
+                log.LogInformation("Essai {Essai} : {Confirmation}", id, line);
                 if (faults > 0)
                 {
                     return (new TrialVerdict(Verdicts.Fault, $"CodinGame : {faults} partie(s) en faute (plantage, temps ou coup invalide)"), duel);
                 }
 
-                Telemetry.SetChampionScore(candWins, candidateGames.Count);
-                score += $" ; sur CodinGame contre {cfg.Api.Adversaire} : {candWins}/{k} (champion {champWins}/{k})";
+                if (cfg.Api.ConfirmationJoueurs > 0 && minus > plus)
+                {
+                    return (new TrialVerdict(Verdicts.Rejected, $"meilleur que le champion en local mais moins bon que lui contre de vrais joueurs : {score} ; {line}"), duel);
+                }
+
+                Telemetry.SetChampionScore(candWins, n);
+                score += $" ; {line}";
             }
         }
 
@@ -328,11 +344,36 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return (new BenchOutcome(cases.Count, cw, chw, plus, minus), null);
     }
 
+    /// <summary>
+    /// Adversaires de la confirmation : des joueurs classés au-dessus de nous, choisis par une règle
+    /// fixe (<see cref="Confirmation.PickOpponents"/>), ou <c>api.adversaire</c> si aucun n'est demandé
+    /// ou si le classement est indisponible.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ConfirmationOpponentsAsync(CancellationToken ct)
+    {
+        var cfg = ctx.Config.Api;
+        if (cfg.ConfirmationJoueurs <= 0)
+        {
+            return [cfg.Adversaire];
+        }
+
+        var me = await api.GetRankingAsync(ctx.Config.Jeu, ct);
+        var players = await api.GetOpponentsAsync(ctx.Config.Jeu, ct);
+        var picked = me is null ? [] : Confirmation.PickOpponents(players, me.LeagueRank, cfg.ConfirmationJoueurs, cfg.ConfirmationRangsAuDessus);
+        if (picked.Count == 0)
+        {
+            log.LogWarning("Confirmation : aucun joueur à affronter (classement indisponible), repli sur {Adversaire}", cfg.Adversaire);
+            return [cfg.Adversaire];
+        }
+
+        log.LogInformation("Confirmation contre {N} joueurs classés au-dessus du rang {Rang} : {Agents}", picked.Count, me!.LeagueRank, string.Join(", ", picked));
+        return picked;
+    }
+
     /// <summary>Joue des parties de test sur CodinGame : une par option donnée (null = circuit tiré au hasard).</summary>
     private async Task<List<ApiGameEntry>> PlayApiGamesAsync(
-        string hash, string source, IReadOnlyList<string?> options, long? trialId, CancellationToken ct)
+        string hash, string source, string opponent, IReadOnlyList<string?> options, long? trialId, CancellationToken ct)
     {
-        var opponent = ctx.Config.Api.Adversaire;
         var games = new List<ApiGameEntry>();
         foreach (var option in options)
         {

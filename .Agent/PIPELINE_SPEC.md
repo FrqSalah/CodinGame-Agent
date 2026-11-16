@@ -1,6 +1,6 @@
 # Pipeline Mad Pod Racing — conception et état
 
-> **Statut** : en production sur le VPS · **Dernière mise à jour** : 2026-11-13
+> **Statut** : en production sur le VPS · **Dernière mise à jour** : 2026-11-16
 > Ce document décrit ce qui est construit. Il prime sur tout autre fichier de `.Agent/`.
 
 ## 1. Ce que fait la pipeline
@@ -186,6 +186,19 @@ Le 2026-11-13 :
 - **Commande `juger`** : juge un bot écrit hors de la ferme (par exemple à la main) avec les mêmes
   étapes et les mêmes seuils qu'un candidat des agents : duel, banc, confirmation, promotion et
   soumission. C'est la seule voie pour soumettre un tel bot.
+
+Le 2026-11-16 :
+
+- **Confirmation contre de vrais joueurs** : le banc (120 parties sur 120 gagnées par le champion)
+  et la confirmation contre « default » (20 sur 20) ne départageaient plus rien. Un candidat qui
+  passe le duel joue désormais sur CodinGame contre `api.confirmation_joueurs` joueurs (6) classés
+  au plus `api.confirmation_rangs_au_dessus` rangs (60) au-dessus de nous, répartis régulièrement,
+  `api.parties_confirmation` parties (4) chacun, sur les mêmes circuits que le champion. Il est
+  jeté s'il perd plus de ces parties que le champion n'en perd de son côté. Le choix des
+  adversaires est une règle fixe (`Pipeline/Confirmation.cs`) ; aucune IA ne décide. Le banc local
+  est vidé (`banc.adversaires` : []), réactivable par la configuration.
+- **Relevé du classement** : un délai d'attente HTTP arrêtait la boucle sans message ; corrigé, et
+  la page signale un relevé en retard.
 
 Toujours non vérifié :
 
