@@ -1,37 +1,35 @@
-# Moteur de Mad Pod Racing (ligues Gold et Legend)
+# Mad Pod Racing engine (Gold and Legend leagues)
 
-Les parties locales sont jouées par le moteur libre
+Local games are played by the open-source engine
 [robostac/coders-strike-back-referee](https://github.com/robostac/coders-strike-back-referee)
-(licence MIT), que son auteur a vérifié contre plus de 500 vraies parties CodinGame.
-Les valeurs ci-dessous viennent de ce moteur ; l'énoncé officiel (REGLES.md) prime
-en cas de désaccord.
+(MIT license), which its author checked against more than 500 real CodinGame games. The values
+below come from that engine; the official statement (RULES.md) takes precedence in case of
+disagreement.
 
-Coordonnées entières, carte 16000 × 9000, y vers le bas. Angles en degrés,
-0 = vers la droite, sens horaire à l'écran.
+Integer coordinates, 16000 × 9000 map, y pointing down. Angles in degrees, 0 = facing right,
+clockwise on screen.
 
-## Un tour, dans l'ordre
+## One turn, in order
 
-1. **Rotation** vers le point visé, d'au plus 18° par tour (aucune limite au premier tour).
-2. **Poussée** : `v += (cos a, sin a) × poussée`. BOOST = 650, une fois par pod et par
-   course. SHIELD : masse 10 pendant ce tour, et aucune poussée pendant les 3 tours
-   suivants.
-3. **Déplacement** avec détection continue des chocs : deux pods (rayon 400) se touchent
-   à 800 d'écart. Choc élastique : l'impulsion est appliquée, portée à au moins 120,
-   puis appliquée une seconde fois. Un checkpoint (rayon 600) est franchi quand le centre
-   du pod y entre.
-4. **Fin de tour** : position arrondie, vitesse `× 0,85` puis tronquée vers zéro.
+1. **Rotation** toward the target point, at most 18° per turn (no limit on the first turn).
+2. **Thrust**: `v += (cos a, sin a) × thrust`, thrust from 0 to 200. BOOST = 650; on
+   CodinGame a team has a single BOOST shared by its two pods (a second BOOST gives the maximum
+   thrust). SHIELD: mass × 10 during that turn, and no thrust during the next 3 turns.
+3. **Movement** with continuous collision detection: two pods (radius 400) touch at a distance
+   of 800. Elastic collision: the impulse is applied, raised to at least 120, then applied a
+   second time. A checkpoint (radius 600) is passed when the pod's center enters it.
+4. **End of turn**: position rounded, speed `× 0.85` then truncated toward zero.
 
-## Course
+## Race
 
-- 3 tours de circuit. On part du checkpoint 0, on vise d'abord le checkpoint 1.
-- Un joueur dont aucun pod ne franchit de checkpoint pendant 100 tours perd.
-- Les circuits sont tirés parmi une douzaine de modèles, décalés de quelques unités.
-- Vitesse limite en ligne droite à poussée 100 : environ 560 par tour.
+- 3 laps. Pods start at checkpoint 0 and first aim at checkpoint 1.
+- A player whose pods pass no checkpoint for 100 turns loses.
+- Maps are drawn from about a dozen layouts, shifted by a few units.
+- Top speed in a straight line: about 1130 per turn at thrust 200 (about 560 at thrust 100).
 
-## Entrées et sorties (deux pods par joueur)
+## Input and output (two pods per player)
 
-- Au début : nombre de tours, nombre de checkpoints, puis une ligne `x y` par checkpoint.
-- À chaque tour : 4 lignes `x y vx vy angle prochainCheckpoint` — vos deux pods, puis
-  les deux pods adverses. Au premier tour, l'angle vaut -1.
-- Réponse : une ligne par pod, `x y poussée`, `x y BOOST` ou `x y SHIELD`.
-  Poussée de 0 à 100.
+- At start: number of laps, number of checkpoints, then one line `x y` per checkpoint.
+- Every turn: 4 lines `x y vx vy angle nextCheckpointId`: your two pods, then the two opponent
+  pods. On the first turn, the angle is -1.
+- Answer: one line per pod, `x y thrust`, `x y BOOST` or `x y SHIELD`. Thrust from 0 to 200.

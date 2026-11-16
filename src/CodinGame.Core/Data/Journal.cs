@@ -106,7 +106,7 @@ public sealed class Journal : IDisposable
     public int RepairIdeas(Func<string, string> ideaOf)
     {
         var broken = Query(
-            "SELECT id, note FROM essais WHERE note IS NOT NULL AND TRIM(COALESCE(idee, '')) IN ('', 'IDEE :', 'IDEE:', 'IDÉE :', 'IDÉE:')",
+            "SELECT id, note FROM essais WHERE note IS NOT NULL AND TRIM(COALESCE(idee, '')) IN ('', 'IDEE :', 'IDEE:', 'IDÉE :', 'IDÉE:', 'IDEA :', 'IDEA:')",
             r => (r.GetInt64(0), r.GetString(1)));
         foreach (var (id, note) in broken)
         {

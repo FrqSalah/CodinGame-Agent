@@ -30,7 +30,7 @@ public sealed record GivenCandidate(string Source, string Idea, string Note);
 /// </summary>
 public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner agents, ILogger log)
 {
-    private const string Instruction = "Lis le fichier TACHE.md de ce dossier et suis ses instructions à la lettre.";
+    private const string Instruction = "Read the file TASK.md in this folder and follow its instructions to the letter.";
 
     /// <summary>
     /// Taille maximale d'une consigne passée en argument. Linux refuse un argument de plus de
@@ -100,12 +100,12 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         // 1. Penseur : une idée, écrite avant tout code.
         var thinkDir = Path.Combine(dir, "penseur");
         var thinkPrompt = await WriteWorkspaceAsync(thinkDir, "penseur", ct,
-            ("REGLES.md", rules),
-            ("MOTEUR.md", engine),
-            ("STRATEGIE.md", ReadOrEmpty(ctx.Paths.Strategy)),
+            ("RULES.md", rules),
+            ("ENGINE.md", engine),
+            ("STRATEGY.md", ReadOrEmpty(ctx.Paths.Strategy)),
             (botFile, championSource),
-            ("HISTORIQUE.md", History(cfg.Contexte.EssaisResumes)),
-            ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
+            ("HISTORY.md", History(cfg.Contexte.EssaisResumes)),
+            ("GUIDANCE.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
         var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
@@ -123,7 +123,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         var codeDir = Path.Combine(dir, "codeur");
         var codePrompt = await WriteWorkspaceAsync(codeDir, "codeur", ct,
             ("NOTE.md", note),
-            ("MOTEUR.md", engine),
+            ("ENGINE.md", engine),
             (botFile, championSource));
         var code = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, codePrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         journal.AddTrialTokens(id, "codeur", code.Tokens);
@@ -147,9 +147,9 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             log.LogInformation("Essai {Essai} : erreur de compilation, correction {N}", id, corrections);
             var fixPrompt = await WriteWorkspaceAsync(codeDir, "codeur", ct,
                 ("NOTE.md", note),
-                ("MOTEUR.md", engine),
+                ("ENGINE.md", engine),
                 (botFile, candidate),
-                ("ERREURS.md", Clip(build.Errors, 6000)));
+                ("ERRORS.md", Clip(build.Errors, 6000)));
             var fix = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, fixPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
             journal.AddTrialTokens(id, "codeur", fix.Tokens);
             candidate = ReadOrEmpty(Path.Combine(codeDir, botFile));
@@ -406,13 +406,13 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         log.LogInformation("Essai {Essai} : {N} essais sans promotion, appel du regard neuf", id, cfg.Boucle.RejetsAvantRegardNeuf);
         var lookDir = Path.Combine(dir, "regard-neuf");
         var lookPrompt = await WriteWorkspaceAsync(lookDir, "regard_neuf", ct,
-            ("REGLES.md", ReadOrEmpty(ctx.Paths.Rules)),
-            ("MOTEUR.md", ReadOrEmpty(ctx.Paths.EngineNotes)),
-            ("STRATEGIE.md", ReadOrEmpty(ctx.Paths.Strategy)),
+            ("RULES.md", ReadOrEmpty(ctx.Paths.Rules)),
+            ("ENGINE.md", ReadOrEmpty(ctx.Paths.EngineNotes)),
+            ("STRATEGY.md", ReadOrEmpty(ctx.Paths.Strategy)),
             (cfg.Bot.Fichier, championSource),
-            ("HISTORIQUE.md", History(int.MaxValue)),
-            ("CONSIGNES.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
-            ("ORIENTATION_PRECEDENTE.md", ReadOrEmpty(ctx.Paths.Orientation)));
+            ("HISTORY.md", History(int.MaxValue)),
+            ("GUIDANCE.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
+            ("PREVIOUS_ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
         var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, lookPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
         if (look.Success && !string.IsNullOrWhiteSpace(look.Response))
         {
@@ -461,7 +461,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     {
         Directory.CreateDirectory(dir);
         var task = ctx.Fill(await File.ReadAllTextAsync(ctx.Paths.Prompt(role), ct));
-        await File.WriteAllTextAsync(Path.Combine(dir, "TACHE.md"), task, ct);
+        await File.WriteAllTextAsync(Path.Combine(dir, "TASK.md"), task, ct);
         foreach (var (name, content) in files)
         {
             if (!string.IsNullOrWhiteSpace(content))
@@ -473,8 +473,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         await agents.GrantAsync(dir, ct);
 
         var prompt = new StringBuilder(task)
-            .Append("\n\n---\n\n# Documents\n\nTous les documents utiles sont ci-dessous. Ne lis aucun fichier : ")
-            .Append("le seul fichier à toucher, s'il y en a un, est celui que ta tâche te demande d'écrire.\n\n");
+            .Append("\n\n---\n\n# Documents\n\nAll the useful documents are below. Do not read any file: ")
+            .Append("the only file to touch, if any, is the one your task asks you to write.\n\n");
         foreach (var (name, content) in files.Where(f => !string.IsNullOrWhiteSpace(f.Content)))
         {
             prompt.Append("## ").Append(name).Append("\n\n````\n").Append(content.TrimEnd()).Append("\n````\n\n");
@@ -494,26 +494,26 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     private string History(int recent)
     {
         var all = ctx.Journal.AllTrials();
-        var sb = new StringBuilder("# Historique des essais\n\n");
+        var sb = new StringBuilder("# Trial history\n\n");
         var champions = ctx.Journal.ChampionCount();
-        sb.Append(CultureInfo.InvariantCulture, $"Promotions depuis le bot de départ : {champions - 1}. Essais terminés : {all.Count}.\n\n");
+        sb.Append(CultureInfo.InvariantCulture, $"Promotions since the starting bot: {champions - 1}. Finished trials: {all.Count}.\n\n");
         if (all.Count == 0)
         {
-            return sb.Append("Aucun essai pour l'instant : c'est le premier.\n").ToString();
+            return sb.Append("No trial yet: this is the first one.\n").ToString();
         }
 
-        sb.Append("## Derniers essais (le plus récent en premier)\n\n| # | Verdict | Idée | Contre le champion | Raison |\n|---|---|---|---|---|\n");
+        sb.Append("## Latest trials (most recent first)\n\n| # | Verdict | Idea | Against the champion | Reason |\n|---|---|---|---|---|\n");
         foreach (var t in all.TakeLast(Math.Min(recent, all.Count)).Reverse())
         {
             sb.Append(CultureInfo.InvariantCulture,
-                $"| {t.Id} | {t.Verdict} | {Cell(t.Idea)} | {t.Wins} V / {t.Losses} D | {Cell(t.Reason)} |\n");
+                $"| {t.Id} | {t.Verdict} | {Cell(t.Idea)} | {t.Wins} W / {t.Losses} L | {Cell(t.Reason)} |\n");
         }
 
         var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not null && t.Idea is not null)
             .TakeLast(ctx.Config.Contexte.IdeesRejetees).ToList();
         if (rejected.Count > 0)
         {
-            sb.Append("\n## Idées déjà essayées sans succès\n\n");
+            sb.Append("\n## Ideas already tried without success\n\n");
             foreach (var t in rejected)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"- #{t.Id} ({t.Verdict}) : {Cell(t.Idea)}\n");
@@ -533,7 +533,9 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         for (var i = 0; i < lines.Count; i++)
         {
             var l = lines[i].TrimStart('#', '-', ' ');
-            if (l.StartsWith("IDEE", StringComparison.OrdinalIgnoreCase) || l.StartsWith("IDÉE", StringComparison.OrdinalIgnoreCase))
+            // Notes in English (IDEA:) since 2026-11-16; older notes in French (IDEE / IDÉE).
+            if (l.StartsWith("IDEA", StringComparison.OrdinalIgnoreCase) || l.StartsWith("IDEE", StringComparison.OrdinalIgnoreCase)
+                || l.StartsWith("IDÉE", StringComparison.OrdinalIgnoreCase))
             {
                 var value = l[4..].TrimStart(':', ' ', '*', '\t');
                 if (value.Length == 0)

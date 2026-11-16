@@ -1,9 +1,9 @@
-# Consignes de l'utilisateur
+# User guidance
 
-Ce fichier est lu par le penseur et le regard neuf à chaque essai. Modifie-le librement
-pour orienter la recherche : il est relu à l'essai suivant, sans redémarrage.
+This file is read by the thinker and the fresh look at every trial. Edit it freely to steer
+the search: it is read again at the next trial, without a restart.
 
-- Objectif : gagner la course le plus souvent possible, contre des adversaires variés.
-- Priorité à la robustesse : jamais de dépassement de temps ni de sortie invalide.
-- Les deux pods comptent : un coureur rapide et un bloqueur qui gêne le meilleur adversaire
-  sont une base classique, pas une obligation.
+- Goal: win the race as often as possible, against varied opponents.
+- Robustness first: never a timeout or an invalid output.
+- Both pods matter: a fast runner and a blocker that hinders the best opponent are a classic
+  base, not an obligation.

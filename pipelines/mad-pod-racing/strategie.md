@@ -1,94 +1,91 @@
-# Ce qui fait gagner à Mad Pod Racing
+# What wins at Mad Pod Racing
 
-Synthèse des techniques employées par les meilleurs bots de ce jeu (ex-Coders Strike Back),
-d'après les guides et retours d'expérience publiés par des joueurs du haut du classement.
-C'est une carte des directions qui ont fait leurs preuves, pas une recette à appliquer d'un
-coup : un essai ne doit faire avancer le bot que d'**un pas** dans l'une d'elles.
+A summary of the techniques used by the best bots of this game (formerly Coders Strike Back),
+from guides and post-mortems published by top players. It is a map of directions that proved
+themselves, not a recipe to apply in one go: a trial should move the bot forward by **one
+step** in one of them.
 
-## 1. Simuler exactement, puis chercher
+## 1. Simulate exactly, then search
 
-Tous les bots du haut du classement font la même chose à chaque tour : ils **simulent la
-physique exacte** du jeu (voir MOTEUR.md) sur plusieurs tours à l'avance, et **cherchent** la
-suite d'actions qui donne le meilleur état final.
+All top bots do the same thing every turn: they **simulate the exact physics** of the game
+(see ENGINE.md) several turns ahead, and **search** for the sequence of actions that gives the
+best final state.
 
-- **La simulation doit être fidèle** au moteur : rotation limitée à 18°, poussée, chocs
-  élastiques avec impulsion minimale, frottement de 0,85, arrondi des positions et troncature
-  des vitesses à chaque fin de tour, passage de checkpoint dès que le centre entre dans le
-  cercle. Une simulation approximative fait optimiser le mauvais problème : c'est la première
-  chose à vérifier avant d'affiner quoi que ce soit d'autre.
-- **Ce qu'on cherche** : pour chaque pod et chaque tour de l'horizon, un changement d'angle
-  (entre -18° et +18°) et une poussée (0 à 100), plus éventuellement BOOST ou SHIELD. Le point
-  visé envoyé au jeu se déduit de l'angle choisi.
-- **Horizon** : 4 à 8 tours. Au-delà, l'imprécision sur l'adversaire domine.
-- **Méthodes qui marchent** : algorithme génétique, recuit simulé, ou mutation aléatoire
-  avec conservation des meilleures solutions. Le choix compte moins que le nombre de
-  simulations par tour.
-- **Réutiliser la solution du tour précédent**, décalée d'un tour, comme point de départ :
-  le gain est immédiat et gratuit.
+- **The simulation must be faithful** to the engine: rotation limited to 18°, thrust, elastic
+  collisions with a minimum impulse, friction of 0.85, positions rounded and speeds truncated at
+  the end of every turn, a checkpoint passed as soon as the center enters the circle. An
+  approximate simulation optimizes the wrong problem: it is the first thing to check before
+  tuning anything else.
+- **What is searched**: for each pod and each turn of the horizon, an angle change (between
+  -18° and +18°) and a thrust (0 to 200), plus possibly BOOST or SHIELD. The target point sent
+  to the game follows from the chosen angle.
+- **Horizon**: 4 to 8 turns. Beyond that, the uncertainty about the opponent dominates.
+- **Methods that work**: genetic algorithm, simulated annealing, or random mutation keeping the
+  best solutions. The choice matters less than the number of simulations per turn.
+- **Reuse the previous turn's solution**, shifted by one turn, as a starting point: the gain is
+  immediate and free.
 
-## 2. Utiliser tout le temps disponible
+## 2. Use all the available time
 
-- La force d'une recherche croît avec le nombre de simulations. Les meilleurs bots
-  consomment l'essentiel du temps permis (énoncé : premier tour et tours suivants), avec une
-  marge de sécurité de quelques millisecondes.
-- Le premier tour dispose de beaucoup plus de temps : il sert à chercher plus longtemps, et à
-  décider le BOOST de départ.
-- La vitesse du code est donc une stratégie à part entière : tableaux de taille fixe, pas
-  d'allocation dans la boucle, tables de sinus et cosinus précalculées, `#pragma GCC optimize`.
+- The strength of a search grows with the number of simulations. The best bots use most of the
+  allowed time (statement: first turn and following turns), with a safety margin of a few
+  milliseconds.
+- The first turn has much more time: use it to search longer, and to decide the starting BOOST.
+- Code speed is therefore a strategy in its own right: fixed-size arrays, no allocation in the
+  loop, precomputed sine and cosine tables, `#pragma GCC optimize`.
 
-## 3. Optimiser les deux pods ensemble
+## 3. Optimize both pods together
 
-- Les deux pods ne sont pas indépendants : ils se gênent ou s'aident par collision. Les
-  meilleurs bots cherchent les actions des **deux pods dans la même simulation**, notées par
-  une seule évaluation.
-- **Rôles** : un **coureur** (le plus avancé) et un **bloqueur**. Le rôle se réévalue à chaque
-  tour selon l'avancement, avec un peu d'hystérésis pour éviter les bascules permanentes.
+- The two pods are not independent: they hinder or help each other through collisions. The best
+  bots search the actions of **both pods in the same simulation**, scored by a single
+  evaluation.
+- **Roles**: a **runner** (the most advanced) and a **blocker**. The role is reassessed every
+  turn from progress, with a little hysteresis to avoid constant switching.
 
-## 4. Une bonne fonction d'évaluation
+## 4. A good evaluation function
 
-Elle décide de tout. Les éléments qui reviennent chez les meilleurs :
+It decides everything. The elements that come back in the best bots:
 
-- **Avancement du coureur** : nombre de checkpoints franchis × une grande constante, moins la
-  distance au prochain checkpoint. Ajouter un terme d'orientation ou de vitesse vers le
-  checkpoint aide à anticiper le virage suivant.
-- **Écart avec l'adversaire** : notre meilleur coureur contre **leur** meilleur coureur. Gêner
-  leur coureur vaut autant que faire avancer le nôtre.
-- **Bloqueur** : se placer **devant** le coureur adverse, entre lui et son prochain checkpoint,
-  orienté vers lui, plutôt que le poursuivre par derrière.
-- **Défaite et victoire** : course finie, ou délai de 100 tours sans checkpoint, valent
-  ±l'infini.
+- **Runner progress**: checkpoints passed × a large constant, minus the distance to the next
+  checkpoint. Adding a term for orientation or speed toward the checkpoint helps anticipate the
+  next turn.
+- **Gap with the opponent**: our best runner against **their** best runner. Hindering their
+  runner is worth as much as advancing ours.
+- **Blocker**: stand **in front of** the opponent's runner, between it and its next checkpoint,
+  facing it, rather than chasing it from behind.
+- **Loss and win**: race finished, or 100 turns without a checkpoint, are worth ±infinity.
 
-## 5. Prévoir l'adversaire
+## 5. Predict the opponent
 
-- La simulation doit faire bouger les pods adverses, sinon le bot croit qu'ils restent
-  immobiles. Le modèle le plus simple et déjà efficace : l'adversaire vise son prochain
-  checkpoint à pleine poussée.
-- Mieux : consacrer une petite part du temps à chercher les meilleures actions **de
-  l'adversaire** avec la même recherche, puis chercher nos actions contre ce plan.
+- The simulation must move the opponent's pods, otherwise the bot believes they stand still.
+  The simplest model, already effective: the opponent aims at its next checkpoint at full
+  thrust.
+- Better: spend a small share of the time searching the **opponent's** best actions with the
+  same search, then search our actions against that plan.
 
-## 6. BOOST et SHIELD
+## 6. BOOST and SHIELD
 
-- BOOST : une fois par pod et par course. Le plus souvent au premier tour, ou sur la plus
-  longue ligne droite ; à intégrer dans la recherche plutôt qu'en règle fixe.
-- SHIELD : multiplie la masse par 10 pendant un tour, mais coupe la poussée pendant les 3
-  tours suivants. Utile pour encaisser ou donner un choc décisif ; coûteux s'il est déclenché
-  trop souvent. À laisser décider par la simulation.
+- BOOST: one per team and per race on CodinGame, shared by both pods. Most often on the first
+  turn, or on the longest straight line; better left to the search than to a fixed rule.
+- SHIELD: multiplies the mass by 10 for one turn, but cuts thrust for the next 3 turns. Useful
+  to absorb or deliver a decisive hit; costly if triggered too often. Leave it to the
+  simulation.
 
-## Ordre de progression conseillé
+## Suggested order of progress
 
-1. Simulation exacte et vérifiée.
-2. Recherche simple pour le coureur, avec réutilisation de la solution précédente.
-3. Évaluation qui compare les deux équipes, et bloqueur placé devant l'adversaire.
-4. Recherche commune aux deux pods.
-5. Modèle de l'adversaire, puis recherche de l'adversaire.
-6. Vitesse du code et usage de tout le temps disponible.
+1. Exact, verified simulation.
+2. Simple search for the runner, reusing the previous solution.
+3. Evaluation comparing both teams, and a blocker placed in front of the opponent.
+4. A joint search for both pods.
+5. An opponent model, then an opponent search.
+6. Code speed and use of all the available time.
 
-Avant de proposer une idée, situe le champion actuel sur cette liste : la plus grande marge
-est en général à la première étape qu'il ne remplit pas encore complètement.
+Before proposing an idea, place the current champion on this list: the largest margin is
+usually at the first step it does not fully cover yet.
 
-## Références publiques
+## Public references
 
-- Guide de Magus sur Coders Strike Back (simulation et algorithme génétique) :
+- Magus's guide to Coders Strike Back (simulation and genetic algorithm):
   http://files.magusgeek.com/csb/csb.html
-- Retours d'expérience de joueurs Legend : https://tcourreges.github.io/coders-strike-back et
+- Post-mortems by Legend players: https://tcourreges.github.io/coders-strike-back and
   https://medium.com/@jstnlef/postmortem-of-coders-strike-back-f4d642d270ca
