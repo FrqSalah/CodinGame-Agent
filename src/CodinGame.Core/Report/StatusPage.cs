@@ -17,7 +17,8 @@ public sealed record StatusData(
     IReadOnlyDictionary<string, DateTime> BlockedModels,
     (int Trials, double Penseur, double Codeur, double RegardNeuf, double Total) Tokens,
     string Orientation,
-    DateTime Now);
+    DateTime Now,
+    TimeSpan RankingInterval);
 
 /// <summary>
 /// Page de suivi de la ferme, en HTML simple : classement dans le temps, champion, essais,
@@ -88,6 +89,12 @@ public static class StatusPage
         Tile(html, $"Ligue {E(last.League)}", $"{last.LeagueRank.ToString("N0", Fr)}<small> / {last.LeagueTotal.ToString("N0", Fr)}</small>",
             last.Percentage < 100 ? $"<span class=\"muted\">classement en cours : {last.Percentage} %</span>" : "<span class=\"muted\">classement stable</span>");
         html.Append("</div>");
+
+        // Un relevé en retard se voit : sinon la page affiche un classement périmé sans le dire.
+        var age = d.Now - last.At;
+        html.Append(age > 2 * d.RankingInterval + TimeSpan.FromMinutes(5)
+            ? $"<p class=\"alert\">Classement non relevé depuis {Minutes(age)} (un relevé est prévu toutes les {(int)d.RankingInterval.TotalMinutes} min) : les chiffres ci-dessus sont périmés.</p>"
+            : $"<p class=\"muted\">Dernier relevé il y a {Minutes(age)}.</p>");
         if (d.Rankings.Count >= 2)
         {
             html.Append(ScoreChart(d.Rankings, d.Champions));
@@ -223,7 +230,10 @@ public static class StatusPage
     private static DateTime Start(TrialSummary t) =>
         DateTime.Parse(t.Start, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 
-    private static string Minutes(TimeSpan s) => s.TotalMinutes < 60 ? $"{(int)s.TotalMinutes} min" : $"{(int)s.TotalHours} h {s.Minutes:D2}";
+    private static string Minutes(TimeSpan s) =>
+        s.TotalMinutes < 60 ? $"{(int)s.TotalMinutes} min"
+        : s.TotalHours < 48 ? $"{(int)s.TotalHours} h {s.Minutes:D2}"
+        : $"{(int)s.TotalDays} j {s.Hours} h";
 
     private static string VerdictClass(string verdict) => verdict switch
     {
@@ -277,6 +287,7 @@ public static class StatusPage
         details summary { cursor:pointer; } details p { margin:6px 0 0; } pre { white-space:pre-wrap; font:13px/1.45 ui-monospace, monospace; }
         .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--muted); margin-right:8px; }
         .dot.live { background:var(--good); box-shadow:0 0 0 3px var(--good-bg); }
+        .alert { color:var(--bad); background:var(--bad-bg); border-radius:8px; padding:8px 12px; font-weight:600; }
         code { font:13px ui-monospace, monospace; }
         td, summary { overflow-wrap:anywhere; }
         @media (max-width: 720px) {

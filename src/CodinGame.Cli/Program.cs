@@ -150,7 +150,8 @@ string RenderStatus()
         blocked,
         journal.TokenAverages(10),
         File.Exists(p.Orientation) ? File.ReadAllText(p.Orientation) : "",
-        DateTime.UtcNow));
+        DateTime.UtcNow,
+        TimeSpan.FromMinutes(ConfigLoader.Load(p.ConfigSeed, p.ConfigData).Api.ReleveClassementMinutes)));
 }
 
 async Task<int> RunTrial() => await farm.RunOnceAsync(PipelineArg(), ct) ? 0 : 2;

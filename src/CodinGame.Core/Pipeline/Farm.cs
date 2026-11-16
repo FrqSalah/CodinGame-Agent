@@ -159,8 +159,10 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                         log.LogInformation("Pipeline {Pipeline} : classement {Rang}/{Total}, score {Score}", name, ranking.Rank, ranking.Total, ranking.Score);
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
+                    // Toute erreur, délai d'attente HTTP compris (TaskCanceledException), est passagère :
+                    // le relevé suivant réessaie. Seul l'arrêt de la ferme termine cette boucle.
                     log.LogWarning("Pipeline {Pipeline} : relevé du classement impossible : {Erreur}", name, ex.Message);
                 }
             }

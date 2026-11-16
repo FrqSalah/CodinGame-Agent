@@ -20,7 +20,8 @@ public class StatusPageTests
         new Dictionary<string, DateTime>(),
         (10, 150_000, 25_000, 4_000, 179_000),
         "",
-        Now);
+        Now,
+        TimeSpan.FromMinutes(60));
 
     [Fact]
     public void Shows_the_ranking_progress_and_escapes_agent_text()
@@ -38,6 +39,15 @@ public class StatusPageTests
         Assert.DoesNotContain("<script>", html);
         Assert.Contains("&lt;script&gt;", html);
         Assert.Contains("Essai <b>#122</b> en cours", html);
+    }
+
+    [Fact]
+    public void Warns_when_the_ranking_was_not_recorded_for_a_long_time()
+    {
+        var html = StatusPage.Render(Data([new RankingEntry(Now.AddHours(-34), 124, 236_701, 39.42, "Legend", 124, 2263, 100)]));
+
+        Assert.Contains("Classement non relevé depuis 34 h 00", html);
+        Assert.DoesNotContain("Dernier relevé il y a", html);
     }
 
     [Fact]
