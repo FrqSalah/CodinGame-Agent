@@ -165,7 +165,84 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
         }
 
+        // 4. Lab: quick games against the champion. A fault or a clear deficit goes back to the
+        //    coder, who can fix a bug before the expensive judge. The judge alone decides.
+        var lab = cfg.Laboratoire;
+        for (var round = 0; lab.Parties > 0; round++)
+        {
+            var outcome = await LabAsync(build.Executable!, championSource, ct);
+            var rate = outcome.Games == 0 ? 0 : (outcome.Wins + 0.5 * outcome.Draws) / outcome.Games;
+            log.LogInformation("Essai {Essai} : laboratoire {Tour} — {V} V / {D} D{Faute}", id, round + 1, outcome.Wins, outcome.Losses,
+                outcome.CandidateFault is null ? "" : $", faute : {outcome.CandidateFault}");
+            if (round >= lab.RevisionsMax || (outcome.CandidateFault is null && rate >= lab.SeuilRevision))
+            {
+                break;
+            }
+
+            var revisePrompt = await WriteWorkspaceAsync(codeDir, "codeur", ct,
+                ("NOTE.md", note),
+                ("ENGINE.md", engine),
+                (botFile, candidate),
+                ("LAB.md", LabReport(outcome, rate)));
+            var revision = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, revisePrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
+            journal.AddTrialTokens(id, "codeur", revision.Tokens);
+            var revised = ReadOrEmpty(Path.Combine(codeDir, botFile));
+            if (!revision.Success || string.IsNullOrWhiteSpace(revised) || Normalize(revised) == Normalize(candidate))
+            {
+                log.LogInformation("Essai {Essai} : le codeur garde sa version", id);
+                break;
+            }
+
+            var revisedBuild = await ctx.Builder.BuildAsync(revised, ct);
+            if (!revisedBuild.Success)
+            {
+                log.LogInformation("Essai {Essai} : la version corrigée ne compile pas, la précédente est gardée", id);
+                break;
+            }
+
+            candidate = revised;
+            build = revisedBuild;
+            hash = BotBuilder.Hash(candidate);
+            journal.SaveBot(hash, candidate);
+            journal.SetTrialCandidate(id, hash, corrections);
+            await File.WriteAllTextAsync(Path.Combine(dir, "candidat" + Path.GetExtension(botFile)), candidate, ct);
+        }
+
         return await JudgeAsync(id, hash, candidate, build.Executable!, championHash, championSource, ct);
+    }
+
+    /// <summary>Quick lab duel: at most <c>laboratoire.parties</c> games, never extended, nothing journaled.</summary>
+    private async Task<DuelOutcome> LabAsync(string candidateExe, string championSource, CancellationToken ct)
+    {
+        var champion = await ctx.Builder.BuildAsync(championSource, ct);
+        var n = ctx.Config.Laboratoire.Parties;
+        var settings = ctx.Config.Arene with
+        {
+            PartiesMax = n,
+            PartiesMin = Math.Min(ctx.Config.Arene.PartiesMin, n),
+            PartiesProlongation = n,
+        };
+        using (Telemetry.Source.StartActivity("laboratoire"))
+        {
+            return await new Duel(ctx.Referee, settings, log).RunAsync(candidateExe, champion.Executable!, null, ct);
+        }
+    }
+
+    /// <summary>What the coder learns from the lab, in the language of its prompt.</summary>
+    public static string LabReport(DuelOutcome o, double rate)
+    {
+        var sb = new StringBuilder("# Lab results of your previous version\n\n");
+        sb.Append(CultureInfo.InvariantCulture,
+            $"Quick games against the current champion: {o.Wins} wins, {o.Losses} losses, {o.Draws} draws ({rate:P0} win rate).\n\n");
+        if (o.CandidateFault is not null)
+        {
+            sb.Append("Your version FAILED a game (crash, timeout or invalid output): ").Append(o.CandidateFault).Append("\n\n");
+        }
+
+        sb.Append("A version that loses clearly more than it wins against the champion usually hides a bug ")
+          .Append("in the implementation (sign, unit, index, time limit). Look for one and fix it, keeping the ")
+          .Append("idea of NOTE.md. If you find no bug, write the file unchanged: the judge will decide.\n");
+        return sb.ToString();
     }
 
     /// <summary>Rejuge le candidat d'un essai passé contre le champion actuel.</summary>
@@ -314,6 +391,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         if (cfg.Api.SoumettreChampions)
         {
             var submission = await api.SubmitAsync(cfg.Jeu, cfg.Langage, candidate, ct);
+            journal.SetChampionSubmission(submission);
             log.LogInformation("Essai {Essai} : nouveau champion soumis au classement (soumission {Soumission})", id, submission);
             score += $" ; soumis au classement ({submission})";
         }
@@ -507,6 +585,18 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         {
             sb.Append(CultureInfo.InvariantCulture,
                 $"| {t.Id} | {t.Verdict} | {Cell(t.Idea)} | {t.Wins} W / {t.Losses} L | {Cell(t.Reason)} |\n");
+        }
+
+        // The real leaderboard, the only goal: what each recent champion actually scored.
+        var scored = ctx.Journal.ScoredChampions().TakeLast(8).ToList();
+        if (scored.Count > 0)
+        {
+            sb.Append("\n## Real CodinGame score of the latest champions (oldest first)\n\n");
+            foreach (var c in scored)
+            {
+                sb.Append(CultureInfo.InvariantCulture,
+                    $"- {(c.TrialId is { } t ? $"trial #{t}" : "starting bot")}: score {c.Score:0.00}, rank {c.Rank}{(c.Retired ? " (withdrawn: scored clearly lower than the previous champion)" : "")}\n");
+            }
         }
 
         var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not null && t.Idea is not null)

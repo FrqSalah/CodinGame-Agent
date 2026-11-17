@@ -152,7 +152,8 @@ string RenderStatus()
         journal.TokenAverages(10),
         File.Exists(p.Orientation) ? File.ReadAllText(p.Orientation) : "",
         DateTime.UtcNow,
-        TimeSpan.FromMinutes(ConfigLoader.Load(p.ConfigSeed, p.ConfigData).Api.ReleveClassementMinutes)));
+        TimeSpan.FromMinutes(ConfigLoader.Load(p.ConfigSeed, p.ConfigData).Api.ReleveClassementMinutes),
+        journal.ScoredChampions()));
 }
 
 async Task<int> RunTrial() => await farm.RunOnceAsync(PipelineArg(), ct) ? 0 : 2;

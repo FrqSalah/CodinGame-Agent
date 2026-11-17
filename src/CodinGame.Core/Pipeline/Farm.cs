@@ -157,6 +157,16 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                         using var journal = new Journal(p.Journal);
                         journal.AddRanking(ranking);
                         log.LogInformation("Pipeline {Pipeline} : classement {Rang}/{Total}, score {Score}", name, ranking.Rank, ranking.Total, ranking.Score);
+                        if (ranking.SubmissionId is { } submission && ranking.Percentage >= 100)
+                        {
+                            journal.SetChampionSubmissionIfMissing(submission);
+                            if (journal.RecordFinalScore(submission, ranking.Score, ranking.Rank))
+                            {
+                                log.LogInformation("Pipeline {Pipeline} : score réel du champion {Champion} : {Score} (rang {Rang})",
+                                    name, journal.ChampionHash(), ranking.Score, ranking.Rank);
+                                await RollBackIfWorseAsync(name, p, cfg, journal, ct);
+                            }
+                        }
                     }
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -168,6 +178,32 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
             }
 
             await Task.Delay(wait, ct);
+        }
+    }
+
+    /// <summary>
+    /// Restores the previous champion when the current one scores clearly lower on the real
+    /// leaderboard (<see cref="RankingCheck"/>), and resubmits it. The withdrawn champion stays in
+    /// the journal, marked, so the agents see it in their history.
+    /// </summary>
+    private async Task RollBackIfWorseAsync(string name, PipelinePaths p, PipelineConfig cfg, Journal journal, CancellationToken ct)
+    {
+        if (RankingCheck.Regression(journal.ScoredChampions(), journal.ChampionHash(), cfg.Api.RetourSiBaisse) is not { } r
+            || journal.BotSource(r.Restore.Hash) is not { } source)
+        {
+            return;
+        }
+
+        journal.RetireChampion(r.Worse.Id);
+        journal.SetChampion(r.Restore.Hash, r.Restore.TrialId);
+        await File.WriteAllTextAsync(p.ChampionFile(cfg.Bot.Fichier), source, ct);
+        log.LogWarning("Pipeline {Pipeline} : le champion {Moins} (score {S1}) fait moins bien que {Avant} (score {S2}) : retour au précédent",
+            name, r.Worse.Hash, r.Worse.Score, r.Restore.Hash, r.Restore.Score);
+        if (cfg.Api.SoumettreChampions)
+        {
+            var submission = await api.SubmitAsync(cfg.Jeu, cfg.Langage, source, ct);
+            journal.SetChampionSubmission(submission);
+            log.LogInformation("Pipeline {Pipeline} : champion {Champion} soumis de nouveau (soumission {Soumission})", name, r.Restore.Hash, submission);
         }
     }
 

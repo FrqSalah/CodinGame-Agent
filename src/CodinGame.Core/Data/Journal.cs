@@ -11,6 +11,9 @@ public sealed record RankingEntry(DateTime At, int Rank, int Total, double Score
 
 public sealed record ChampionEntry(long Id, string Hash, long? TrialId, DateTime Since);
 
+/// <summary>A champion whose submission was fully ranked on CodinGame; <paramref name="Retired"/> after a rollback.</summary>
+public sealed record ScoredChampion(long Id, string Hash, long? TrialId, double Score, int Rank, bool Retired);
+
 public sealed record ApiGameEntry(long GameId, string BotHash, string Opponent, string Options, string Outcome, bool Fault);
 
 /// <summary>
@@ -65,6 +68,16 @@ public sealed class Journal : IDisposable
         {
             Exec($"ALTER TABLE essais ADD COLUMN {role} INTEGER NOT NULL DEFAULT 0");
         }
+
+        // Real ranking of each champion's submission, and rollbacks (2026-11-17).
+        var championColumns = Query("PRAGMA table_info(champions)", r => r.GetString(1));
+        foreach (var (column, type) in new[] { ("soumission_id", "INTEGER"), ("score_final", "REAL"), ("rang_final", "INTEGER"), ("retire", "INTEGER NOT NULL DEFAULT 0") })
+        {
+            if (!championColumns.Contains(column))
+            {
+                Exec($"ALTER TABLE champions ADD COLUMN {column} {type}");
+            }
+        }
     }
 
     /// <summary>Colonne de consommation de chaque rôle d'agent.</summary>
@@ -92,6 +105,27 @@ public sealed class Journal : IDisposable
         Exec("INSERT INTO champions (bot_hash, essai_id, depuis) VALUES ($h, $e, $t)", ("$h", hash), ("$e", trialId), ("$t", Now()));
 
     public int ChampionCount() => Convert.ToInt32(Scalar("SELECT COUNT(*) FROM champions"), CultureInfo.InvariantCulture);
+
+    /// <summary>Links the current champion to the CodinGame submission that sent it to the leaderboard.</summary>
+    public void SetChampionSubmission(long submissionId) =>
+        Exec("UPDATE champions SET soumission_id = $s WHERE id = (SELECT MAX(id) FROM champions)", ("$s", submissionId));
+
+    /// <summary>The submission on the leaderboard belongs to the current champion if none is recorded yet (champions promoted before 2026-11-17).</summary>
+    public void SetChampionSubmissionIfMissing(long submissionId) =>
+        Exec("UPDATE champions SET soumission_id = $s WHERE id = (SELECT MAX(id) FROM champions) AND soumission_id IS NULL", ("$s", submissionId));
+
+    /// <summary>Records the score of a fully ranked submission, once. Returns true the first time.</summary>
+    public bool RecordFinalScore(long submissionId, double score, int rank) =>
+        Exec("UPDATE champions SET score_final = $sc, rang_final = $r WHERE soumission_id = $s AND score_final IS NULL",
+            ("$sc", score), ("$r", rank), ("$s", submissionId)) > 0;
+
+    /// <summary>Champions whose submission was fully ranked, oldest first.</summary>
+    public IReadOnlyList<ScoredChampion> ScoredChampions() =>
+        Query("SELECT id, bot_hash, essai_id, score_final, rang_final, retire FROM champions WHERE score_final IS NOT NULL ORDER BY id",
+            r => new ScoredChampion(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetInt64(2), r.GetDouble(3), r.GetInt32(4), r.GetInt64(5) != 0));
+
+    public void RetireChampion(long championId) =>
+        Exec("UPDATE champions SET retire = 1 WHERE id = $i", ("$i", championId));
 
     // ---- Essais ----
 

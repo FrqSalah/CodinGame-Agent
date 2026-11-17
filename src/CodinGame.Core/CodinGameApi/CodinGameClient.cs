@@ -23,7 +23,7 @@ public sealed record PuzzleInfo(string League, int PlayersMin, int PlayersMax, I
 public sealed record TestGameResult(GameLog? Log, string? Failure);
 
 /// <summary>Place du bot soumis : rang mondial, score, ligue et rang dans la ligue.</summary>
-public sealed record RankingSnapshot(int Rank, int Total, double Score, string League, int LeagueRank, int LeagueTotal, int Percentage);
+public sealed record RankingSnapshot(int Rank, int Total, double Score, string League, int LeagueRank, int LeagueTotal, int Percentage, long? SubmissionId = null);
 
 /// <summary>
 /// Seul point d'accès à l'API publique CodinGame. Le token est relu à chaque appel et
@@ -151,7 +151,8 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         return new RankingSnapshot(
             rank.GetInt32(), Int("total"),
             p.TryGetProperty("score", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetDouble() : 0,
-            Text(p, "league") ?? "", Int("league_rank"), Int("league_total"), Int("percentage"));
+            Text(p, "league") ?? "", Int("league_rank"), Int("league_total"), Int("percentage"),
+            p.TryGetProperty("submission_id", out var sub) && sub.ValueKind == JsonValueKind.Number ? sub.GetInt64() : null);
     }
 
     /// <summary>Parties de test restantes sur la fenêtre la plus contraignante, ou null si inconnu.</summary>

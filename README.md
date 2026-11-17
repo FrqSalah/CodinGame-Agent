@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-16
+> **Status**: in production · **Last updated**: 2026-11-17
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -61,9 +61,11 @@ open from the owner's devices only.
 flowchart LR
     T["Thinker<br/>one idea"] --> C["Coder<br/>rewrites the bot"]
     C --> B["Build<br/>g++, up to 2 fixes"]
-    B --> D["Local duel<br/>SPRT vs champion"]
+    B --> L["Lab<br/>quick games, fix bugs"]
+    L --> D["Local duel<br/>SPRT vs champion"]
     D --> R["Confirmation<br/>real players on CodinGame"]
     R --> K["New champion<br/>submitted"]
+    K --> S["Real score<br/>rollback if worse"]
 ```
 
 1. **Thinker** (Antigravity, Gemini Flash High): reads the official rules, the engine notes, a
@@ -71,15 +73,23 @@ flowchart LR
    a short note.
 2. **Coder** (Antigravity, Gemini Flash Medium): applies the note to the C++ bot, in one pass.
 3. **Build**: `g++ -std=c++20`; compile errors go back to the coder up to twice.
-4. **Local duel**: candidate against champion with the
+4. **Lab**: the farm plays 40 quick games of the candidate against the champion. A fault or a
+   win rate below 45 % goes back to the coder as `LAB.md`, so it can fix a bug in its
+   implementation before the expensive judge (at most twice). The agent still runs no command:
+   the farm plays the games.
+5. **Local duel**: candidate against champion with the
    [robostac referee](https://github.com/robostac/coders-strike-back-referee), each map played
    from both seats, in parallel, until Wald's SPRT reaches a verdict (H0: 0 Elo, H1: 40 Elo,
    alpha = beta = 0.05). A duel that reaches its cap while the candidate leads is extended once.
-5. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
+6. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
    champion each play 4 games against 6 real players ranked up to 60 places above us, on the
    exact same maps. The candidate is rejected if it loses more of these games than the champion
    does. Opponents are picked by a fixed rule, not by an AI.
-6. **Promotion**: the candidate becomes champion and is submitted to the leaderboard.
+7. **Promotion**: the candidate becomes champion and is submitted to the leaderboard.
+8. **Real score**: once the submission is fully ranked, its score is stored with the champion.
+   If it is lower than the previous champion's by more than 1 point, the new champion is
+   withdrawn and the previous one is resubmitted. The agents see real scores and withdrawals in
+   their history.
 
 A trial ends early on an agent failure, a build failure, a fault (crash, timeout or invalid move)
 or a rejection. After 6 trials without a new champion, a **fresh look** agent (Claude Opus, then
@@ -143,7 +153,8 @@ rebuilding. Unknown keys are rejected with the faulty field named. Main sections
 | :--- | :--- |
 | `agents` | Tool, model, fallback chain and time limit of each role |
 | `arene` | Engine command, parallelism, time limits, SPRT parameters |
-| `api` | Confirmation (games per opponent, number of real players, rank span), automatic submission, ranking record interval |
+| `api` | Confirmation (games per opponent, number of real players, rank span), automatic submission, ranking record interval, rollback threshold |
+| `laboratoire` | Coder's lab: quick games, revision threshold, maximum revisions |
 | `boucle` | Trials per day, rejections before a fresh look, retries, pauses |
 | `contexte` | How much history the agents see |
 | `banc` | Optional local bench of outside bots (empty by default: it no longer separated our versions) |
@@ -187,3 +198,4 @@ interrupts the trial in progress. `git reset --hard` is never used, in code or i
   simulations per turn, judge resolution).
 - Decisions to approve from the status page (judge settings, larger work items).
 - A "work item" mode letting a large change mature over several trials before being judged.
+- A small population of scored variants instead of a single champion, to accumulate small gains.

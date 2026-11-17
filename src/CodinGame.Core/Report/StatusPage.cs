@@ -18,7 +18,8 @@ public sealed record StatusData(
     (int Trials, double Penseur, double Codeur, double RegardNeuf, double Total) Tokens,
     string Orientation,
     DateTime Now,
-    TimeSpan RankingInterval);
+    TimeSpan RankingInterval,
+    IReadOnlyList<ScoredChampion>? Scored = null);
 
 /// <summary>
 /// Page de suivi de la ferme, en HTML simple : classement dans le temps, champion, essais,
@@ -114,6 +115,19 @@ public static class StatusPage
             var c = d.Champions[^1];
             html.Append($"<p><code>{E(c.Hash[..Math.Min(12, c.Hash.Length)])}</code> · essai {(c.TrialId is { } t ? "#" + t : "de départ")} · depuis le {c.Since.ToString("d MMM à HH:mm", Fr)}</p>");
             html.Append($"<p class=\"muted\">{d.Champions.Count - 1} promotion(s) depuis le début</p>");
+        }
+
+        if (d.Scored is { Count: > 0 } scored)
+        {
+            html.Append("<table><thead><tr><th>Score réel des derniers champions</th><th class=\"num\">Score</th><th class=\"num\">Rang</th></tr></thead><tbody>");
+            foreach (var c in scored.TakeLast(6).Reverse())
+            {
+                var label = c.TrialId is { } t ? $"essai #{t}" : "bot de départ";
+                html.Append($"<tr><td>{label}{(c.Retired ? " <span class=\"badge failed\">retiré</span>" : "")}</td>");
+                html.Append($"<td class=\"num\">{c.Score.ToString("0.00", Fr)}</td><td class=\"num\">{c.Rank}</td></tr>");
+            }
+
+            html.Append("</tbody></table>");
         }
 
         if (d.Bench.Count > 0)

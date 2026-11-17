@@ -1,69 +1,79 @@
-# CodinGame Agent — Pipeline Mad Pod Racing
+# CodinGame Agent — Mad Pod Racing pipeline
 
-Une boucle autonome qui améliore un bot CodinGame (Mad Pod Racing) : Antigravity propose et
-code, un moteur de jeu existant fait jouer candidat et champion, un test statistique tranche,
-CodinGame confirme. Déployée en continu sur un VPS, supervisée par le dashboard Aspire.
+> **Status**: in production · **Last updated**: 2026-11-17
 
-Pile : .NET 10, SQLite, Docker, Aspire 13.6. Bot en C++20. Moteur local :
-robostac/coders-strike-back-referee (MIT, Go), figé à un commit dans le `Dockerfile`.
+An autonomous loop that improves a CodinGame bot (Mad Pod Racing): Antigravity proposes and
+codes, an existing game engine plays candidate against champion, a statistical test decides,
+real CodinGame games confirm, and the real leaderboard score has the last word. Continuously
+deployed to a VPS, monitored with the Aspire dashboard and a status page.
 
-## À lire avant toute intervention
+Stack: .NET 10, SQLite, Docker, Aspire 13.6. Bot in C++20. Local engine:
+robostac/coders-strike-back-referee (MIT, Go), pinned to a commit in the `Dockerfile`.
 
-**[`.Agent/PIPELINE_SPEC.md`](.Agent/PIPELINE_SPEC.md)** décrit ce qui est construit, les
-décisions et ce qui reste à vérifier. Il prime sur les autres documents de `.Agent/`, dont la
-plupart décrivent une conception plus vaste, mise de côté.
+## Read before any change
 
-## Principes
+**[`.Agent/PIPELINE_SPEC.md`](.Agent/PIPELINE_SPEC.md)** describes what is built, the decisions
+and what remains to be checked. It takes precedence over the other documents in `.Agent/`, most
+of which describe a larger design that was set aside. [`README.md`](README.md) is the public
+overview.
 
-- **KISS, DRY.** Ne rien écrire que CodinGame, Antigravity, le moteur robostac ou SQLite font déjà.
-- **Pas de moteur de jeu écrit par nous** : un moteur existant, au protocole `cg-brutaltester`.
-- **Une IA ne décide jamais si un bot est meilleur.** Elle propose ; le SPRT tranche.
+## Principles
 
-## Règles dures
+- **KISS, DRY.** Write nothing that CodinGame, Antigravity, the robostac engine or SQLite already do.
+- **No game engine written by us**: an existing engine, with the `cg-brutaltester` protocol.
+- **An AI never decides whether a bot is better.** It proposes; the SPRT, real games and the
+  real score decide.
 
-1. **Le token CodinGame ne s'affiche jamais, ne se colle jamais dans une conversation, ne se
-   committe jamais.** Sur le PC : `~/.config/codingame/token`. Sur le VPS :
-   `/opt/codingame-farm/secrets/codingame_token`, root, lecture seule, illisible par l'agent.
-2. **Soumission automatique des champions**, autorisée par l'utilisateur le 2026-11-11
-   (`api.soumettre_champions`). Seul un candidat gardé par le SPRT puis sans faute sur
-   CodinGame est soumis ; rien d'autre ne soumet.
-3. **Jamais de jeu d'arcade**, aucune modification du compte CodinGame.
-4. **Tout accès à CodinGame passe par `CodinGameClient`**, tout appel d'IA par `AgentRunner`.
-5. **Aucune valeur en dur** : réglages dans `pipeline.json` (relu à chaque essai), limites
-   lues dans les réponses de l'API.
-6. **`matches.db` fait foi** pour tout résultat.
-7. **Le code de sortie d'Antigravity ne prouve rien** : il sort en 0 quand il échoue. Lire le
-   statut JSON et vérifier ce qui a été produit. L'agent tourne sous l'utilisateur `agent`,
-   dans un dossier qui ne contient que ce qu'il doit lire et le fichier qu'il peut modifier.
-   Les bots (des agents ou d'autres joueurs) tournent sous l'utilisateur `bot`, sans accès aux
-   secrets. Du code venu d'ailleurs n'est exécuté qu'avec l'accord de l'utilisateur.
-8. **Jamais `git reset --hard`**, ni dans le code, ni dans le déploiement.
-9. **Pousser sur `main` déploie** sur le VPS (après la CI). Ne pousser que du code testé.
+## Hard rules
 
-Documents : liens relatifs, pas de LaTeX, chaque fichier daté et doté d'un statut.
+1. **The CodinGame token is never printed, never pasted in a conversation, never committed.**
+   On the PC: `~/.config/codingame/token`. On the VPS: `/opt/codingame-farm/secrets/codingame_token`,
+   root, read-only, unreadable by the agent.
+2. **Automatic submission of champions**, authorized by the user on 2026-11-11
+   (`api.soumettre_champions`). Only a candidate kept by the SPRT, then without fault and not
+   worse than the champion against real players on CodinGame, is submitted; and a former
+   champion restored by the ranking loop (`api.retour_si_baisse`, authorized on 2026-11-17).
+   Nothing else submits.
+3. **Never an arcade game**, no change to the CodinGame account.
+4. **Every access to CodinGame goes through `CodinGameClient`**, every AI call through `AgentRunner`.
+5. **No hard-coded values**: settings in `pipeline.json` (read at every trial), limits read from
+   the API responses.
+6. **`matches.db` is the source of truth** for every result.
+7. **Antigravity's exit code proves nothing**: it exits with 0 when it fails. Read the JSON status
+   and check what was produced. The agent runs as the `agent` user, in a folder holding only what
+   it must read and the file it may modify, and runs no command. Bots (the agents' or other
+   players') run as the `bot` user, without access to secrets. Code from elsewhere only runs with
+   the user's approval.
+8. **Never `git reset --hard`**, in code or in deployment.
+9. **Pushing to `main` deploys** to the VPS (after the CI) and interrupts the running trial. Only
+   push tested code, and group pushes.
+10. **Everything pushed is in English** (code comments, documents, commit messages). The
+    repository is public: never push the VPS address, the Tailscale network name, domain names,
+    the user's nickname or e-mail.
 
-## Structure
+Documents: relative links, no LaTeX, every file dated and with a status.
+
+## Layout
 
 ```
-src/CodinGame.Core/          logique : config, journal, API, moteur, duel, juge, agents, boucle
-src/CodinGame.Cli/           commandes (servir, essai, verifier, bilan, duel, rejuger, juger, banc, page) ; bilan et
-                             verifier ne modifient pas le journal
-src/CodinGame.ServiceDefaults/ télémétrie OTLP vers le dashboard Aspire
-src/CodinGame.AppHost/       lancement local avec le dashboard Aspire
-tests/CodinGame.Tests/       tests ; les parties réelles tournent dans l'image Docker
-pipelines/mad-pod-racing/    configuration, consignes des agents, bots de départ
-deploy/                      compose, entrée du conteneur, timer de déploiement du VPS
+src/CodinGame.Core/            logic: config, journal, API, engine, duel, judge, agents, trial, farm, status page
+src/CodinGame.Cli/             commands (servir, essai, verifier, bilan, duel, rejuger, juger, banc, page);
+                               bilan and verifier do not modify the journal
+src/CodinGame.ServiceDefaults/ OTLP telemetry to the Aspire dashboard
+src/CodinGame.AppHost/         local run with the Aspire dashboard
+tests/CodinGame.Tests/         tests; real games run inside the Docker image
+pipelines/mad-pod-racing/      configuration, agent prompts, starting bots
+deploy/                        compose, container entrypoint, deploy timer
 ```
 
-## État réel (relevé le 2026-11-11 à 10 h UTC)
+## Actual state (2026-11-17)
 
-- La ferme **tourne seule** sur le VPS, avec Antigravity connecté et des modèles Google
-  uniquement (choix de l'utilisateur).
-- Compte en **Gold**, 2ᵉ sur 14 311 et éligible à Legend ; 1 967ᵉ mondial.
-- 27 essais, 5 champions gardés et soumis. `farm bilan` donne l'état à jour.
-- 14 tests verts dans l'image, dont 3 parties réelles avec le moteur.
+- The farm **runs on its own** on the VPS, Antigravity logged in.
+- Account in **Legend**, around 110th of about 236,000 players. `farm bilan` and the status
+  page give the up-to-date state.
+- About 150 trials, 25 champions kept and submitted.
 
-## Commandes
+## Commands
 
 ```
 dotnet build CodinGame.sln
