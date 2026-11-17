@@ -164,7 +164,10 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
 - **2026-11-16**: confirmation against real players; local bench emptied (saturated); ranking
   loop survives HTTP timeouts; agent prompts and documents in English.
 - **2026-11-17**: coder's lab; ranking loop with rollback; real scores on the page and in the
-  agents' history.
+  agents' history. Fixed: since the real-player confirmation (2026-11-16, 48 test games per
+  candidate), the quota check compared that need with the 10-per-minute window and paused the
+  farm for about 29 hours. Only windows large enough to hold the need count now, and test games
+  wait for an empty short window to refill instead of failing.
 
 ## 11. Still unverified
 

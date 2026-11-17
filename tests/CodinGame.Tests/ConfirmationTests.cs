@@ -42,3 +42,25 @@ public class ConfirmationTests
         Assert.Equal((2, 1, 3, 2), (plus, minus, cw, chw));
     }
 }
+
+public class TestGameQuotaTests
+{
+    private static readonly (string, int, int)[] Fresh =
+        [("test_games_1m", 10, 10), ("test_games_5m", 20, 20), ("test_games_1h", 80, 80), ("test_games_24h", 600, 600)];
+
+    [Fact]
+    public void Short_windows_smaller_than_the_need_do_not_block()
+    {
+        // 48 games never fit in a 10-per-minute window: they are paced, not refused.
+        Assert.Null(CodinGame.Core.CodinGameApi.CodinGameClient.TestGameShortfall(Fresh, 48));
+    }
+
+    [Fact]
+    public void A_large_window_without_enough_games_blocks()
+    {
+        var used = new[] { ("test_games_1m", 10, 10), ("test_games_1h", 80, 30), ("test_games_24h", 600, 500) };
+
+        Assert.Equal("30 test games left in window test_games_1h, 48 needed",
+            CodinGame.Core.CodinGameApi.CodinGameClient.TestGameShortfall(used, 48));
+    }
+}

@@ -36,7 +36,7 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
     public const string BaseUrl = "https://www.codingame.com/api/v1";
 
     /// <summary>Au-delà de ce délai d'attente, on rend la main au lieu de bloquer.</summary>
-    private static readonly TimeSpan MaxInlineWait = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan MaxInlineWait = TimeSpan.FromMinutes(16);
 
     private static readonly SemaphoreSlim TestGameGate = new(1, 1);
 
@@ -89,6 +89,7 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         await TestGameGate.WaitAsync(ct);
         try
         {
+            await PaceTestGamesAsync(ct);
             var body = new JsonObject
             {
                 ["language"] = language,
@@ -155,12 +156,79 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
             p.TryGetProperty("submission_id", out var sub) && sub.ValueKind == JsonValueKind.Number ? sub.GetInt64() : null);
     }
 
+    /// <summary>
+    /// Why <paramref name="needed"/> test games cannot be played now, or null if they can. Only the
+    /// windows large enough to hold them count: the short ones (10 per minute...) refill while the
+    /// games are played, and <see cref="PlayTestGameAsync"/> paces itself on them.
+    /// </summary>
+    public async Task<string?> TestGameShortfallAsync(string puzzle, int needed, CancellationToken ct)
+    {
+        var r = await SendAsync(HttpMethod.Get, $"/limits?puzzle={puzzle}", null, ct);
+        return r.TryGetProperty("test_games", out var windows) && windows.ValueKind == JsonValueKind.Array
+            ? TestGameShortfall(windows.EnumerateArray().Select(w => (
+                w.GetProperty("name").GetString() ?? "?", w.GetProperty("limit").GetInt32(), w.GetProperty("remaining").GetInt32())), needed)
+            : null;
+    }
+
+    /// <summary>The first window whose limit can hold <paramref name="needed"/> games but whose remainder cannot.</summary>
+    public static string? TestGameShortfall(IEnumerable<(string Name, int Limit, int Remaining)> windows, int needed) =>
+        windows.Where(w => w.Limit >= needed && w.Remaining < needed)
+            .Select(w => $"{w.Remaining} test games left in window {w.Name}, {needed} needed")
+            .FirstOrDefault();
+
     /// <summary>Parties de test restantes sur la fenêtre la plus contraignante, ou null si inconnu.</summary>
     public async Task<int?> TestGamesLeftAsync(string puzzle, CancellationToken ct)
     {
         var r = await SendAsync(HttpMethod.Get, $"/limits?puzzle={puzzle}", null, ct);
         return MinRemaining(r, "test_games");
     }
+
+    /// <summary>Until when a test game window is empty, read from the last responses: test games wait for it instead of hitting 429.</summary>
+    private DateTime _testGamesBlockedUntil = DateTime.MinValue;
+
+    private void RememberEmptyTestGameWindows(JsonElement json)
+    {
+        if (json.ValueKind != JsonValueKind.Object || !json.TryGetProperty("limits", out var limits)
+            || limits.ValueKind != JsonValueKind.Object || !limits.TryGetProperty("test_games", out var tg))
+        {
+            return;
+        }
+
+        var windows = tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().ToList() : tg.ValueKind == JsonValueKind.Object ? [tg] : [];
+        foreach (var w in windows)
+        {
+            if (w.TryGetProperty("remaining", out var rem) && rem.ValueKind == JsonValueKind.Number && rem.GetInt32() <= 0
+                && w.TryGetProperty("resets_in_seconds", out var reset) && reset.ValueKind == JsonValueKind.Number)
+            {
+                var until = DateTime.UtcNow.AddSeconds(reset.GetDouble() + 1);
+                if (until > _testGamesBlockedUntil)
+                {
+                    _testGamesBlockedUntil = until;
+                }
+            }
+        }
+    }
+
+    /// <summary>Waits for an empty test game window to refill; a wait longer than <see cref="MaxPacingWait"/> is a quota pause.</summary>
+    private async Task PaceTestGamesAsync(CancellationToken ct)
+    {
+        var wait = _testGamesBlockedUntil - DateTime.UtcNow;
+        if (wait <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        if (wait > MaxPacingWait)
+        {
+            throw new QuotaExhaustedException("Fenêtre de parties de test CodinGame épuisée.", wait);
+        }
+
+        log.LogInformation("Parties de test : fenêtre épuisée, attente de {Seconds} s", (int)wait.TotalSeconds);
+        await Task.Delay(wait, ct);
+    }
+
+    /// <summary>Longest pause between two test games of the same confirmation (the 15-minute window).</summary>
+    private static readonly TimeSpan MaxPacingWait = TimeSpan.FromMinutes(16);
 
     private async Task<JsonElement> SendAsync(HttpMethod method, string path, JsonObject? body, CancellationToken ct)
     {
@@ -185,6 +253,7 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
                     Telemetry.SetApiTestGamesLeft(left);
                 }
 
+                RememberEmptyTestGameWindows(json);
                 return json;
             }
 
