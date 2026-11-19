@@ -58,5 +58,12 @@
     "parties": 40,
     "revisions_max": 2,
     "seuil_revision": 0.45
+  },
+  "analyse": {
+    "seuil_choc": 25,
+    "ecart_chocs": 3,
+    "ecart_cadence": 0.5,
+    "arrivee_serree": 1,
+    "parties_classees_par_releve": 30
   }
 }

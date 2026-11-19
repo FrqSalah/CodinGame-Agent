@@ -59,16 +59,20 @@ int main() {
     int turn = 0;
 
     while (true) {
+        // Trace line: the farm reads it in CodinGame games to measure why the bot loses.
+        string trace = "T";
         for (int i = 0; i < 4; i++) {
             Pod& pod = i < 2 ? mine[i] : theirs[i - 2];
             int x, y, vx, vy, angle, next;
             if (!(cin >> x >> y >> vx >> vy >> angle >> next)) return 0;
+            for (int v : {x, y, vx, vy, angle, next}) trace += " " + to_string(v);
             if (turn > 0 && next != pod.next) pod.passed++;
             pod.p = {(double)x, (double)y};
             pod.v = {(double)vx, (double)vy};
             pod.angle = angle;
             pod.next = next;
         }
+        cerr << trace << endl;
 
         // --- Coureur ---
         Pod& run = mine[0];

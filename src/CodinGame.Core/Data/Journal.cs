@@ -5,7 +5,16 @@ namespace CodinGame.Core.Data;
 
 public sealed record TrialSummary(
     long Id, string Start, string? Verdict, string? Reason, string? Idea,
-    int Wins, int Losses, int Draws, string? Penseur, string? Codeur);
+    int Wins, int Losses, int Draws, string? Penseur, string? Codeur,
+    string? Target = null, string? Measures = null);
+
+/// <summary>
+/// One analysed game (<see cref="Analysis.RaceAnalysis"/>). <paramref name="Source"/>: local, test
+/// or battle. <paramref name="Measures"/> is null when the game had no trace line to read.
+/// </summary>
+public sealed record GameAnalysis(
+    string Source, string Ref, long? TrialId, string BotHash, string? Opponent,
+    string Result, bool Fault, Analysis.RaceMeasures? Measures, string? Cause);
 
 public sealed record RankingEntry(DateTime At, int Rank, int Total, double Score, string League, int LeagueRank, int LeagueTotal, int Percentage);
 
@@ -60,6 +69,14 @@ public sealed class Journal : IDisposable
                 releve_le TEXT PRIMARY KEY, rang INTEGER NOT NULL, total INTEGER NOT NULL, score REAL NOT NULL,
                 ligue TEXT NOT NULL, rang_ligue INTEGER NOT NULL, total_ligue INTEGER NOT NULL,
                 pourcentage INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS analyses (
+                source TEXT NOT NULL, ref TEXT NOT NULL, essai_id INTEGER, bot_hash TEXT NOT NULL, adversaire TEXT,
+                resultat TEXT NOT NULL, faute INTEGER NOT NULL, tours INTEGER NOT NULL,
+                cadence REAL, cadence_adv REAL, chocs_coureur INTEGER NOT NULL, chocs_coureur_adv INTEGER NOT NULL,
+                chocs_internes INTEGER NOT NULL, chocs_internes_adv INTEGER NOT NULL,
+                avance INTEGER NOT NULL, avance_adv INTEGER NOT NULL, cause TEXT, analyse_le TEXT NOT NULL,
+                PRIMARY KEY (source, ref));
+            CREATE INDEX IF NOT EXISTS analyses_bot ON analyses (bot_hash, source);
             """);
 
         // Colonnes ajoutées après la mise en service : ajoutées aux journaux existants.
@@ -67,6 +84,12 @@ public sealed class Journal : IDisposable
         foreach (var role in TokenRoles.Values.Where(c => !columns.Contains(c)))
         {
             Exec($"ALTER TABLE essais ADD COLUMN {role} INTEGER NOT NULL DEFAULT 0");
+        }
+
+        // Loss analysis (2026-11-19): the cause a trial aims at, and what its duel measured.
+        foreach (var column in new[] { "cause_visee", "mesures" }.Where(c => !columns.Contains(c)))
+        {
+            Exec($"ALTER TABLE essais ADD COLUMN {column} TEXT");
         }
 
         // Real ranking of each champion's submission, and rollbacks (2026-11-17).
@@ -186,13 +209,13 @@ public sealed class Journal : IDisposable
 
     public IReadOnlyList<TrialSummary> RecentTrials(int count) =>
         Query("""
-            SELECT id, debut, verdict, raison, idee, victoires, defaites, egalites, penseur, codeur
+            SELECT id, debut, verdict, raison, idee, victoires, defaites, egalites, penseur, codeur, cause_visee, mesures
             FROM essais WHERE fin IS NOT NULL ORDER BY id DESC LIMIT $n
             """, ReadTrial, ("$n", count));
 
     public IReadOnlyList<TrialSummary> AllTrials() =>
         Query("""
-            SELECT id, debut, verdict, raison, idee, victoires, defaites, egalites, penseur, codeur
+            SELECT id, debut, verdict, raison, idee, victoires, defaites, egalites, penseur, codeur, cause_visee, mesures
             FROM essais WHERE fin IS NOT NULL ORDER BY id
             """, ReadTrial);
 
@@ -217,7 +240,7 @@ public sealed class Journal : IDisposable
 
     private static TrialSummary ReadTrial(SqliteDataReader r) => new(
         r.GetInt64(0), r.GetString(1), Str(r, 2), Str(r, 3), Str(r, 4),
-        r.GetInt32(5), r.GetInt32(6), r.GetInt32(7), Str(r, 8), Str(r, 9));
+        r.GetInt32(5), r.GetInt32(6), r.GetInt32(7), Str(r, 8), Str(r, 9), Str(r, 10), Str(r, 11));
 
     // ---- Parties ----
 
@@ -282,6 +305,58 @@ public sealed class Journal : IDisposable
 
     private static DateTime Date(string s) =>
         DateTime.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+
+    // ---- Loss analysis ----
+
+    public void SetTrialTarget(long id, string? target) =>
+        Exec("UPDATE essais SET cause_visee = $c WHERE id = $id", ("$c", target), ("$id", id));
+
+    public void SetTrialMeasures(long id, string measures) =>
+        Exec("UPDATE essais SET mesures = $m WHERE id = $id", ("$m", measures), ("$id", id));
+
+    public void AddAnalysis(GameAnalysis a)
+    {
+        var m = a.Measures;
+        Exec("""
+            INSERT OR REPLACE INTO analyses (source, ref, essai_id, bot_hash, adversaire, resultat, faute, tours,
+                cadence, cadence_adv, chocs_coureur, chocs_coureur_adv, chocs_internes, chocs_internes_adv,
+                avance, avance_adv, cause, analyse_le)
+            VALUES ($s, $r, $e, $b, $a, $res, $f, $t, $c1, $c2, $h1, $h2, $o1, $o2, $p1, $p2, $cause, $d)
+            """, ("$s", a.Source), ("$r", a.Ref), ("$e", a.TrialId), ("$b", a.BotHash), ("$a", a.Opponent), ("$res", a.Result),
+            ("$f", a.Fault ? 1 : 0), ("$t", m?.Turns ?? 0), ("$c1", m?.Us.Pace), ("$c2", m?.Them.Pace),
+            ("$h1", m?.Us.RunnerHits ?? 0), ("$h2", m?.Them.RunnerHits ?? 0), ("$o1", m?.Us.OwnHits ?? 0), ("$o2", m?.Them.OwnHits ?? 0),
+            ("$p1", m?.Us.Progress ?? 0), ("$p2", m?.Them.Progress ?? 0), ("$cause", a.Cause), ("$d", Now()));
+    }
+
+    /// <summary>References of the games of a source already read, with or without a trace (never read twice).</summary>
+    public HashSet<string> AnalysedRefs(string source) =>
+        Query("SELECT ref FROM analyses WHERE source = $s", r => r.GetString(0), ("$s", source)).ToHashSet();
+
+    /// <summary>Analysed games of a bot (with a trace), from the given sources.</summary>
+    public IReadOnlyList<GameAnalysis> Analyses(string botHash, params string[] sources) =>
+        Query($"""
+            SELECT {AnalysisColumns} FROM analyses
+            WHERE bot_hash = $b AND tours > 0 AND source IN ({string.Join(", ", sources.Select((_, i) => $"$s{i}"))})
+            """, ReadAnalysis, [("$b", botHash), .. sources.Select((s, i) => ($"$s{i}", (object?)s))]);
+
+    /// <summary>The analysed local games of a trial's duel.</summary>
+    public IReadOnlyList<GameAnalysis> TrialAnalyses(long trialId) =>
+        Query($"SELECT {AnalysisColumns} FROM analyses WHERE source = 'local' AND essai_id = $e AND tours > 0", ReadAnalysis, ("$e", trialId));
+
+    private const string AnalysisColumns = """
+        source, ref, essai_id, bot_hash, adversaire, resultat, faute, tours, cadence, cadence_adv,
+        chocs_coureur, chocs_coureur_adv, chocs_internes, chocs_internes_adv, avance, avance_adv, cause
+        """;
+
+    private static GameAnalysis ReadAnalysis(SqliteDataReader r)
+    {
+        double? Nd(int i) => r.IsDBNull(i) ? null : r.GetDouble(i);
+        var measures = new Analysis.RaceMeasures(r.GetInt32(7),
+            new Analysis.SideMeasures(Nd(8), r.GetInt32(10), r.GetInt32(12), r.GetInt32(14)),
+            new Analysis.SideMeasures(Nd(9), r.GetInt32(11), r.GetInt32(13), r.GetInt32(15)));
+        return new GameAnalysis(r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetInt64(2), r.GetString(3), Str(r, 4),
+            r.GetString(5), r.GetInt32(6) != 0, measures, Str(r, 16));
+    }
 
     public void Dispose() => _db.Dispose();
 

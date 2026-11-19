@@ -1,3 +1,4 @@
+using System.Globalization;
 using CodinGame.Core.Agents;
 using CodinGame.Core.Arena;
 using CodinGame.Core.CodinGameApi;
@@ -162,6 +163,8 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                                 await RollBackIfWorseAsync(name, p, cfg, journal, ct);
                             }
                         }
+
+                        await AnalyseBattlesAsync(name, cfg, journal, ct);
                     }
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -173,6 +176,37 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
             }
 
             await Task.Delay(wait, ct);
+        }
+    }
+
+    /// <summary>
+    /// Reads the latest ranked games of the submitted champion not read yet (at most
+    /// <c>analyse.parties_classees_par_releve</c>) and measures those that carry its trace line.
+    /// Games without a trace are journaled too, so that they are never read again.
+    /// </summary>
+    private async Task AnalyseBattlesAsync(string name, PipelineConfig cfg, Journal journal, CancellationToken ct)
+    {
+        if (cfg.Analyse.PartiesClasseesParReleve <= 0 || journal.ChampionHash() is not { } champion)
+        {
+            return;
+        }
+
+        var seen = journal.AnalysedRefs("battle");
+        var fresh = (await api.GetBattleGameIdsAsync(cfg.Jeu, 100, ct))
+            .Where(id => !seen.Contains(id.ToString(CultureInfo.InvariantCulture)))
+            .Take(cfg.Analyse.PartiesClasseesParReleve)
+            .ToList();
+        var traced = 0;
+        foreach (var id in fresh)
+        {
+            var analysis = Analysis.RaceAnalysis.OfGame("battle", await api.GetGameAsync(id, ct), champion, null, null, cfg.Analyse);
+            journal.AddAnalysis(analysis);
+            traced += analysis.Measures is null ? 0 : 1;
+        }
+
+        if (fresh.Count > 0)
+        {
+            log.LogInformation("Pipeline {Pipeline} : {N} parties classées lues, {T} avec la ligne de trace", name, fresh.Count, traced);
         }
     }
 

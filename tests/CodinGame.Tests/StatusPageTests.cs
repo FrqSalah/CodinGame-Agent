@@ -78,6 +78,19 @@ public class StatusPageTests
     }
 
     [Fact]
+    public void Shows_why_the_champion_loses()
+    {
+        var data = Data([new RankingEntry(Now, 103, 236_714, 40.67, "Legend", 103, 2297, 100)]);
+
+        var html = StatusPage.Render(data with { Losses = new(40, 28, 12, [("blocking", 9), ("speed", 3)]) });
+        var none = StatusPage.Render(data with { Losses = new(0, 0, 0, []) });
+
+        Assert.Contains("Pourquoi on perd", html);
+        Assert.Contains("Bataille de blocage perdue</td><td class='num'>9 · 75 %", html);
+        Assert.Contains("n'écrit pas encore sa ligne de trace", none);
+    }
+
+    [Fact]
     public void Renders_before_the_first_ranking_is_recorded()
     {
         var html = StatusPage.Render(Data([]));

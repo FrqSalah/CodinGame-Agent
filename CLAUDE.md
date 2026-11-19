@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing pipeline
 
-> **Status**: in production · **Last updated**: 2026-11-17
+> **Status**: in production · **Last updated**: 2026-11-19
 
 An autonomous loop that improves a CodinGame bot (Mad Pod Racing): Antigravity proposes and
 codes, an existing game engine plays candidate against champion, a statistical test decides,
@@ -56,7 +56,7 @@ Documents: relative links, no LaTeX, every file dated and with a status.
 ## Layout
 
 ```
-src/CodinGame.Core/            logic: config, journal, API, engine, duel, judge, agents, trial, farm, status page
+src/CodinGame.Core/            logic: config, journal, API, engine, duel, judge, agents, trial, farm, loss analysis, status page
 src/CodinGame.Cli/             commands (servir, essai, verifier, bilan, duel, rejuger, juger, banc, page);
                                bilan and verifier do not modify the journal
 src/CodinGame.ServiceDefaults/ OTLP telemetry to the Aspire dashboard

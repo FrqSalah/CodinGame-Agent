@@ -21,7 +21,8 @@ public sealed record GameLog(
     IReadOnlyList<GameFrame> Frames,
     IReadOnlyList<int> Ranking,
     IReadOnlyList<double> Scores,
-    string? FailCause)
+    string? FailCause,
+    int Me = 0)
 {
     public static GameLog Parse(JsonElement log)
     {
@@ -47,8 +48,30 @@ public sealed record GameLog(
             frames,
             log.TryGetProperty("ranking", out var r) ? r.EnumerateArray().Select(x => x.GetInt32()).ToArray() : [],
             log.TryGetProperty("scores", out var s) ? s.EnumerateArray().Select(x => x.GetDouble()).ToArray() : [],
-            Str(log, "fail_cause"));
+            Str(log, "fail_cause"),
+            MeOf(log));
     }
+
+    /// <summary>Index of our agent: 0 in a test game, either seat in a ranked battle.</summary>
+    private static int MeOf(JsonElement log)
+    {
+        if (log.TryGetProperty("agents", out var agents))
+        {
+            foreach (var a in agents.EnumerateArray())
+            {
+                if (a.TryGetProperty("me", out var me) && me.ValueKind == JsonValueKind.True && a.TryGetProperty("index", out var i))
+                {
+                    return i.GetInt32();
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>Did our agent crash or time out? In a battle, only the frames tell (an error, or the referee's timeout line).</summary>
+    public bool MeFaulted =>
+        Frames.Any(f => (f.Agent == Me && f.Error is not null) || f.Referee?.Contains($"${Me} has not provided", StringComparison.Ordinal) == true);
 
     /// <summary>Le code testé (agent 0) a-t-il planté, dépassé le temps ou joué un coup invalide ?</summary>
     public bool TestedCodeFaulted =>

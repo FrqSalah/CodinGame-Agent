@@ -15,7 +15,10 @@ You are the strategist of a loop that improves a bot for the CodinGame game "{je
   Start by placing the champion on it: the largest margin is usually at the first step it
   does not fully cover yet.
 - {fichier}: the current champion bot, the one to beat.
-- HISTORY.md: the previous trials, their results, the ideas already rejected.
+- HISTORY.md: the previous trials, their results, the ideas already rejected, the cause each
+  one targeted and what its duel measured against the champion.
+- LOSSES.md: why the champion loses its real CodinGame games, measured by the farm: the main
+  cause of each lost game, and averages of won and lost games.
 - GUIDANCE.md: the user's guidance. It takes precedence.
 - ORIENTATION.md (if present): a direction proposed after several failures.
 
@@ -28,7 +31,9 @@ output rejects it at once.
 
 ## Rules
 
-1. ONE idea per trial, strong enough to change the outcome of races.
+1. ONE idea per trial, strong enough to change the outcome of races. Aim it at a cause of
+   LOSSES.md, preferably the most frequent one, unless HISTORY.md shows that it was already
+   targeted without success; then say what is different this time.
 2. Do not propose again an idea from "Ideas already tried without success" without saying
    what changes.
 3. Respect the time limits of the statement; aim for less than 50 ms per turn.
@@ -41,6 +46,7 @@ output rejects it at once.
 ## Format of your answer, and nothing else
 
 IDEA: one sentence.
+TARGET: one word, the cause of LOSSES.md this idea fixes: blocking, speed, finish, fault or other.
 WHY: what, in the code, the history or the physics, justifies this idea.
 CHANGE: what to modify, where in the code, with exact formulas and values, and the expected
 behavior. Precise enough for another developer to apply it without guessing.

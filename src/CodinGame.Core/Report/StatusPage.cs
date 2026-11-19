@@ -19,7 +19,8 @@ public sealed record StatusData(
     string Orientation,
     DateTime Now,
     TimeSpan RankingInterval,
-    IReadOnlyList<ScoredChampion>? Scored = null);
+    IReadOnlyList<ScoredChampion>? Scored = null,
+    Analysis.LossBreakdown? Losses = null);
 
 /// <summary>
 /// Page de suivi de la ferme, en HTML simple : classement dans le temps, champion, essais,
@@ -67,6 +68,7 @@ public static class StatusPage
 
         RankingSection(html, d);
         FarmSection(html, d);
+        LossesSection(html, d);
         TrialsSection(html, d);
         html.Append("</main></body></html>");
         return html.ToString();
@@ -169,6 +171,37 @@ public static class StatusPage
         }
 
         html.Append("</div></section>");
+    }
+
+    /// <summary>Why the champion loses its real games, cause by cause (loss analysis).</summary>
+    private static void LossesSection(StringBuilder html, StatusData d)
+    {
+        if (d.Losses is not { } b)
+        {
+            return;
+        }
+
+        html.Append("<section><h2>Pourquoi on perd</h2>");
+        if (b.Games == 0)
+        {
+            html.Append("<p class='muted'>Aucune vraie partie analysée pour l'instant : le champion actuel n'écrit pas encore sa ligne de trace. Le prochain candidat gardé l'apportera.</p></section>");
+            return;
+        }
+
+        html.Append($"<p class='muted'>{b.Games} vraies parties du champion analysées : {b.Won} gagnées, {b.Lost} perdues. Une cause par défaite, selon une règle fixe.</p>");
+        if (b.Lost > 0)
+        {
+            html.Append("<table><thead><tr><th>Cause</th><th class='num'>Défaites</th></tr></thead><tbody>");
+            foreach (var (cause, count) in b.Causes)
+            {
+                var pct = 100.0 * count / b.Lost;
+                html.Append($"<tr><td>{E(Analysis.LossCauses.French(cause))}</td><td class='num'>{count} · {pct.ToString("0", Fr)} % <span class='bar'><i style='width:{pct.ToString("0", CultureInfo.InvariantCulture)}%'></i></span></td></tr>");
+            }
+
+            html.Append("</tbody></table>");
+        }
+
+        html.Append("</section>");
     }
 
     private static void TrialsSection(StringBuilder html, StatusData d)

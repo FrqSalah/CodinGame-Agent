@@ -52,6 +52,42 @@ public class RefereeGameTests
         Assert.NotEqual(CodinGame.Core.Judging.SprtDecision.Better, outcome.Decision);
     }
 
+    /// <summary>
+    /// The loss analysis predicts each pod's move when it hits nothing. On real engine games, every
+    /// pod is either on its prediction (rounding) or clearly off it (a collision): nothing between.
+    /// </summary>
+    [Fact]
+    public async Task Collisions_stand_out_clearly_in_engine_games()
+    {
+        var exe = await BuildSeedBotAsync();
+        var game = new RefereeGame(Referee!);
+        var deviations = new List<int>();
+        var collisions = 0;
+        for (var seed = 1; seed <= 4; seed++)
+        {
+            await using var a = BotProcess.Start(exe);
+            await using var b = BotProcess.Start(exe);
+            var result = await game.PlayAsync([a, b], seed, Limits, TestContext.Current.CancellationToken, relay: true);
+            var turns = CodinGame.Core.Analysis.RaceAnalysis.FromRelay(result.Relay!)!;
+            deviations.AddRange(CodinGame.Core.Analysis.RaceAnalysis.Deviations(turns));
+            var m = CodinGame.Core.Analysis.RaceAnalysis.Measure(turns, 25);
+            collisions += m.Us.RunnerHits + m.Them.RunnerHits + m.Us.OwnHits + m.Them.OwnHits;
+        }
+
+        Assert.True(deviations.Count > 1000);
+        Assert.True(deviations.Count(d => d is > 5 and <= 25) <= deviations.Count / 200,
+            $"deviations between 5 and 25: {deviations.Count(d => d is > 5 and <= 25)} of {deviations.Count}");
+        Assert.True(collisions > 0);
+    }
+
+    [Fact]
+    public async Task The_seed_bot_writes_the_trace_line()
+    {
+        var exe = await BuildSeedBotAsync();
+
+        Assert.True(await CodinGame.Core.Analysis.RaceAnalysis.PrintsTraceAsync(exe, TestContext.Current.CancellationToken));
+    }
+
     private static readonly TurnLimits Limits = new(TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(300));
 
     private static async Task<string> BuildSeedBotAsync()

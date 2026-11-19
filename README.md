@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-17
+> **Status**: in production · **Last updated**: 2026-11-19
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -12,7 +12,7 @@ Core principle: **an AI never decides whether a bot is better.** It proposes; a 
 (sequential probability ratio test, then real games) decides.
 
 Since the farm started, the account went from Silver (around 89,700th worldwide) to the Legend
-league, around 110th out of about 236,000 players.
+league, around 100th out of about 236,000 players (best: 98th, on 2026-11-19).
 
 ## Architecture
 
@@ -91,6 +91,28 @@ flowchart LR
    withdrawn and the previous one is resubmitted. The agents see real scores and withdrawals in
    their history.
 
+### Loss analysis
+
+The thinker is told why the champion loses, not only how often. Every bot writes one trace line
+per turn to standard error (`T` and the 24 integers it read). CodinGame keeps our standard error
+in the logs of test games and ranked games, so the farm sees the position and speed of the 4 pods
+at every turn, plus every pod's command from the referee's lines; locally it sees the same through
+the engine relay.
+
+- **Collisions** are found without simulating the race: the next state of a pod that hits nothing
+  follows from its state and command (rotation, thrust, rounding, friction). A pod far from that
+  prediction collided. On real games the gap is clean: within a few units, or hundreds.
+- **Measures** per game and per team: collisions suffered by the runner, collisions between the
+  team's own pods, the runner's turns per checkpoint on collision-free stretches, the final gap.
+- **One cause per lost game**, by a fixed rule in this order: fault, blocking battle lost, slower
+  runner, narrow finish, other. Thresholds live in `pipeline.json` (`analyse`).
+- The thinker and the fresh look get `LOSSES.md` (causes, averages of won and lost games, the
+  clearest example of each cause). The thinker names the cause it targets; the history shows, for
+  each trial, the duel's measures candidate against champion; the lab tells the coder the same,
+  and sends a version without the trace line back.
+- The farm reads up to 30 new ranked games of the champion every hour; the status page shows the
+  causes of its real losses.
+
 A trial ends early on an agent failure, a build failure, a fault (crash, timeout or invalid move)
 or a rejection. After 6 trials without a new champion, a **fresh look** agent (Claude Opus, then
 Gemini High) reviews the whole history and writes a new direction for the thinker.
@@ -155,6 +177,7 @@ rebuilding. Unknown keys are rejected with the faulty field named. Main sections
 | `arene` | Engine command, parallelism, time limits, SPRT parameters |
 | `api` | Confirmation (games per opponent, number of real players, rank span), automatic submission, ranking record interval, rollback threshold |
 | `laboratoire` | Coder's lab: quick games, revision threshold, maximum revisions |
+| `analyse` | Loss analysis: collision threshold, cause thresholds, ranked games read per hour |
 | `boucle` | Trials per day, rejections before a fresh look, retries, pauses |
 | `contexte` | How much history the agents see |
 | `banc` | Optional local bench of outside bots (empty by default: it no longer separated our versions) |
@@ -163,7 +186,8 @@ rebuilding. Unknown keys are rejected with the faulty field named. Main sections
 
 `matches.db` (SQLite) is the source of truth: every trial with its idea, note, verdict and tokens
 per role, every local and CodinGame game, every champion, the source of every bot ever tried,
-the fresh-look directions and the hourly ranking. Results are never taken from anywhere else.
+the fresh-look directions, the hourly ranking and the measures of every analysed game. Results
+are never taken from anywhere else.
 
 ## Security
 
@@ -194,8 +218,8 @@ interrupts the trial in progress. `git reset --hard` is never used, in code or i
 
 ## Roadmap
 
-- A measurement sheet and automatic alerts for the agents (real win rate by rank band,
-  simulations per turn, judge resolution).
+- More measures for the agents (real win rate by rank band, simulations per turn, judge
+  resolution) and automatic alerts.
 - Decisions to approve from the status page (judge settings, larger work items).
 - A "work item" mode letting a large change mature over several trials before being judged.
 - A small population of scored variants instead of a single champion, to accumulate small gains.

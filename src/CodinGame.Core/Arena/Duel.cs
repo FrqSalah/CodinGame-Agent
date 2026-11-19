@@ -23,7 +23,8 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         string candidateExe,
         string championExe,
         Action<long, int, MatchResult>? record,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool relay = false)
     {
         var sprt = new Sprt(settings.Elo0, settings.Elo1, settings.Alpha, settings.Beta);
         var limits = new TurnLimits(
@@ -59,7 +60,7 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
             {
                 try
                 {
-                    var result = await PlayOneAsync(seed, candidateSeat, candidateExe, championExe, limits, stop.Token);
+                    var result = await PlayOneAsync(seed, candidateSeat, candidateExe, championExe, limits, relay, stop.Token);
                     Telemetry.LocalGames.Add(1);
                     lock (gate)
                     {
@@ -141,11 +142,11 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         limit < settings.PartiesProlongation && llr >= settings.LlrProlongation;
 
     private async Task<MatchResult> PlayOneAsync(
-        long seed, int candidateSeat, string candidateExe, string championExe, TurnLimits limits, CancellationToken ct)
+        long seed, int candidateSeat, string candidateExe, string championExe, TurnLimits limits, bool relay, CancellationToken ct)
     {
         await using var candidate = BotProcess.Start(candidateExe);
         await using var champion = BotProcess.Start(championExe);
         IBotConnection[] bots = candidateSeat == 0 ? [candidate, champion] : [champion, candidate];
-        return await game.PlayAsync(bots, seed, limits, ct);
+        return await game.PlayAsync(bots, seed, limits, ct, relay);
     }
 }

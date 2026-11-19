@@ -153,7 +153,8 @@ string RenderStatus()
         File.Exists(p.Orientation) ? File.ReadAllText(p.Orientation) : "",
         DateTime.UtcNow,
         TimeSpan.FromMinutes(ConfigLoader.Load(p.ConfigSeed, p.ConfigData).Api.ReleveClassementMinutes),
-        journal.ScoredChampions()));
+        journal.ScoredChampions(),
+        CodinGame.Core.Analysis.LossReport.Breakdown(champion is null ? [] : journal.Analyses(champion, "battle", "test"))));
 }
 
 async Task<int> RunTrial() => await farm.RunOnceAsync(PipelineArg(), ct) ? 0 : 2;

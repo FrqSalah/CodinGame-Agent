@@ -25,7 +25,13 @@ public enum FaultKind
 public sealed record MatchResult(int Winner, IReadOnlyList<FaultKind> Faults, string? Detail = null)
 {
     public bool IsDraw => Winner < 0;
+
+    /// <summary>Every turn of the game, when it was asked for (<see cref="RefereeGame.PlayAsync"/>).</summary>
+    public IReadOnlyList<RelayExchange>? Relay { get; init; }
 }
+
+/// <summary>One turn of one player: the lines the engine sent it and its answer.</summary>
+public sealed record RelayExchange(int Player, IReadOnlyList<string> Input, IReadOnlyList<string> Output);
 
 /// <summary>
 /// Fait jouer deux bots avec un moteur (« referee ») existant, au protocole de
@@ -36,7 +42,8 @@ public sealed record MatchResult(int Winner, IReadOnlyList<FaultKind> Faults, st
 /// </summary>
 public sealed class RefereeGame(string refereeCommand)
 {
-    public async Task<MatchResult> PlayAsync(IReadOnlyList<IBotConnection> bots, long seed, TurnLimits limits, CancellationToken ct)
+    /// <param name="relay">Keep every turn in <see cref="MatchResult.Relay"/>, for the loss analysis.</param>
+    public async Task<MatchResult> PlayAsync(IReadOnlyList<IBotConnection> bots, long seed, TurnLimits limits, CancellationToken ct, bool relay = false)
     {
         var parts = refereeCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var info = new ProcessStartInfo(parts[0])
@@ -70,7 +77,9 @@ public sealed class RefereeGame(string refereeCommand)
             await referee.StandardInput.WriteLineAsync($"###Seed {seed.ToString(CultureInfo.InvariantCulture)}".AsMemory(), ct);
             await referee.StandardInput.WriteLineAsync("###Start 2".AsMemory(), ct);
             await referee.StandardInput.FlushAsync(ct);
-            return await RelayAsync(referee, errors, bots, limits, ct);
+            var exchanges = relay ? new List<RelayExchange>() : null;
+            var result = await RelayAsync(referee, errors, bots, limits, exchanges, ct);
+            return result with { Relay = exchanges };
         }
         finally
         {
@@ -82,7 +91,7 @@ public sealed class RefereeGame(string refereeCommand)
     }
 
     private static async Task<MatchResult> RelayAsync(
-        Process referee, List<string> errors, IReadOnlyList<IBotConnection> bots, TurnLimits limits, CancellationToken ct)
+        Process referee, List<string> errors, IReadOnlyList<IBotConnection> bots, TurnLimits limits, List<RelayExchange>? exchanges, CancellationToken ct)
     {
         var faults = new[] { FaultKind.None, FaultKind.None };
         var answered = new bool[2];
@@ -116,6 +125,7 @@ public sealed class RefereeGame(string refereeCommand)
                     var count = int.Parse(words[2], CultureInfo.InvariantCulture);
                     target = -1;
                     await bots[player].SendAsync(pending[player], ct);
+                    var sent = exchanges is null ? null : pending[player].ToList();
                     pending[player].Clear();
 
                     var limit = answered[player] ? limits.Turn : limits.FirstTurn;
@@ -132,6 +142,8 @@ public sealed class RefereeGame(string refereeCommand)
 
                         replies.Add(reply);
                     }
+
+                    exchanges?.Add(new RelayExchange(player, sent!, replies));
 
                     foreach (var reply in replies)
                     {

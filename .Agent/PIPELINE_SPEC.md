@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-17
+> **Status**: in production on the VPS · **Last updated**: 2026-11-19
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -8,7 +8,9 @@
 An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Racing.
 
 ```
- THINKER (Antigravity)   ── note: one idea, what to change, why
+ LOSS ANALYSIS           ── why the champion loses its real games (LOSSES.md)
+     │
+ THINKER (Antigravity)   ── note: one idea, the cause it targets, what to change, why
      │
  CODER   (Antigravity)   ── applies the note to the C++ bot
      │
@@ -73,6 +75,7 @@ thanks to `pipelines/mad-pod-racing/silver/Bot.cpp`, reached Legend the same day
 | Judge | `Core/Judging/Sprt.cs` | Wald's sequential test (H0: 0 Elo, H1: `elo1`) |
 | Confirmation | `Core/Pipeline/Confirmation.cs` | Fixed rule picking real opponents above us; game-by-game comparison with the champion |
 | Ranking loop | `Core/Pipeline/RankingCheck.cs` | Fixed rule withdrawing a champion that scores clearly lower than the previous one |
+| Loss analysis | `Core/Analysis/RaceAnalysis.cs`, `LossReport.cs` | Turns of a game from the trace line or the engine relay; collisions, pace, cause of a loss; LOSSES.md |
 | Agents | `Core/Agents/AgentRunner.cs`, `FallbackAgentRunner.cs` | `agy -p`; JSON status read (the exit code proves nothing); duration bounded by us; separate `agent` user; model chain with fallback |
 | Trial | `Core/Pipeline/Trial.cs` | Chains the steps of §1 |
 | Farm | `Core/Pipeline/Farm.cs` | Continuous loop, automatic pauses (login, quota, league, configuration), hourly ranking and rollback |
@@ -116,7 +119,33 @@ champion becomes champion again and is resubmitted. The agents see the real scor
 withdrawals in their history. Only the current champion can be withdrawn, never twice against
 the same comparison; 0 disables the rule.
 
-## 8. Deployment
+## 8. Loss analysis (2026-11-19)
+
+Every bot writes, every turn, one line to standard error: `T` then the 24 integers it read
+(x y vx vy angle nextCheckPointId of the 4 pods). CodinGame keeps our standard error in test games
+and in ranked games (checked on 2026-11-19: 297 complete lines out of 297 turns, at most 107
+characters; it sometimes merges two turns in one frame). With the referee's lines, which give
+every pod's command, the farm has the whole game. Locally, the engine relay gives the same.
+
+- Collision: a pod whose next state is more than `analyse.seuil_choc` (25) away from its
+  no-collision prediction (rotation at most 18°, thrust, rounding, `× 0.85` truncated). Checked on
+  a real game: 1,040 pod-turns within 10, 144 beyond 40, none between. It is paired with the
+  nearest pod that also deviated, or else the nearest pod (a shielded pod barely moves).
+- Runner: the team's pod that passed more checkpoints. Pace: its turns per checkpoint on stretches
+  where it hit nothing.
+- Cause of a lost game, first rule that applies: fault; blocking (our runner hit at least
+  `ecart_chocs` (3) times more than theirs); speed (pace at least `ecart_cadence` (0.5) worse);
+  finish (lost by at most `arrivee_serree` (1) checkpoint); other.
+- Sources, all in the `analyses` table: every local duel game, every confirmation game, and up to
+  `parties_classees_par_releve` (30) new ranked games of the champion per hourly ranking.
+- The thinker and the fresh look get LOSSES.md (real games of the champion only). The thinker
+  writes `TARGET:` (stored as `essais.cause_visee`); each trial stores its duel's measures,
+  candidate against champion (`essais.mesures`), shown in HISTORY.md and in LAB.md. The lab sends
+  a version without the trace line back to the coder. The status page shows the causes.
+- The champion is not modified to add the line (a resubmission would reset its ranking): the
+  coder adds it to the next candidates, and the first kept one brings it to the leaderboard.
+
+## 9. Deployment
 
 - **CI** (`.github/workflows/ci.yml`): builds the image, which compiles and runs the tests, real
   engine games included. If everything passes, moves the `deploy` branch.
@@ -133,7 +162,7 @@ the same comparison; 0 disables the rule.
   VPS. They are published on the user's private Tailscale network with `tailscale serve`
   (ports 8443 and 10000). Nothing is open on the Internet for the farm.
 
-## 9. Operations
+## 10. Operations
 
 ```
 # Without Tailscale: SSH tunnel, then http://localhost:18890 (page) and http://localhost:18888 (dashboard)
@@ -147,7 +176,7 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
 ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compose.yml exec farm dotnet /app/farm.dll bilan'
 ```
 
-## 10. History
+## 11. History
 
 - **2026-11-11**: first real run, 27 trials, Silver to Gold, then Legend. Fixed: silent empty
   answers (a denied file read; now an explicit error), the 400-word thinker note, `bilan`
@@ -170,10 +199,13 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   wait for an empty short window to refill instead of failing.
 - **2026-11-19**: the test game quota is checked when a candidate reaches the confirmation
   (waiting up to 6 hours), no longer before every trial; `farm verifier` shows every window;
-  the status page shows the best rank ever held (fully ranked readings only).
+  the status page shows the best rank ever held (fully ranked readings only); loss analysis
+  (section 8).
 
-## 11. Still unverified
+## 12. Still unverified
 
 - What Antigravity returns when the subscription quota is exhausted.
 - How often the lab really changes a candidate, and whether rollbacks happen (first real runs
   pending).
+- The cause thresholds of the loss analysis: initial values, to be set from the first real
+  numbers (they are in `pipeline.json`, no rebuild needed).

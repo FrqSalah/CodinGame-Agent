@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CodinGame.Core.Agents;
+using CodinGame.Core.Analysis;
 using CodinGame.Core.Arena;
 using CodinGame.Core.CodinGameApi;
 using CodinGame.Core.Data;
@@ -105,6 +106,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("STRATEGY.md", ReadOrEmpty(ctx.Paths.Strategy)),
             (botFile, championSource),
             ("HISTORY.md", History(cfg.Contexte.EssaisResumes)),
+            ("LOSSES.md", Losses(championHash)),
             ("GUIDANCE.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
         var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
@@ -117,6 +119,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         var idea = IdeaOf(note);
         await File.WriteAllTextAsync(Path.Combine(dir, "note.md"), note, ct);
         journal.SetTrialNote(id, idea, note);
+        journal.SetTrialTarget(id, TargetOf(note));
         log.LogInformation("Essai {Essai} : idée — {Idee}", id, idea);
 
         // 2. Codeur : applique la note, et rien d'autre.
@@ -165,16 +168,17 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
         }
 
-        // 4. Lab: quick games against the champion. A fault or a clear deficit goes back to the
-        //    coder, who can fix a bug before the expensive judge. The judge alone decides.
+        // 4. Lab: quick games against the champion. A fault, a clear deficit or a missing trace line
+        //    goes back to the coder, who can fix a bug before the expensive judge. The judge alone decides.
         var lab = cfg.Laboratoire;
         for (var round = 0; lab.Parties > 0; round++)
         {
-            var outcome = await LabAsync(build.Executable!, championSource, ct);
+            var (outcome, measures) = await LabAsync(build.Executable!, championSource, ct);
+            var traced = await RaceAnalysis.PrintsTraceAsync(build.Executable!, ct);
             var rate = outcome.Games == 0 ? 0 : (outcome.Wins + 0.5 * outcome.Draws) / outcome.Games;
-            log.LogInformation("Essai {Essai} : laboratoire {Tour} — {V} V / {D} D{Faute}", id, round + 1, outcome.Wins, outcome.Losses,
-                outcome.CandidateFault is null ? "" : $", faute : {outcome.CandidateFault}");
-            if (round >= lab.RevisionsMax || (outcome.CandidateFault is null && rate >= lab.SeuilRevision))
+            log.LogInformation("Essai {Essai} : laboratoire {Tour} — {V} V / {D} D{Faute}{Trace}", id, round + 1, outcome.Wins, outcome.Losses,
+                outcome.CandidateFault is null ? "" : $", faute : {outcome.CandidateFault}", traced ? "" : ", ligne de trace absente");
+            if (round >= lab.RevisionsMax || (outcome.CandidateFault is null && rate >= lab.SeuilRevision && traced))
             {
                 break;
             }
@@ -183,7 +187,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                 ("NOTE.md", note),
                 ("ENGINE.md", engine),
                 (botFile, candidate),
-                ("LAB.md", LabReport(outcome, rate)));
+                ("LAB.md", LabReport(outcome, rate, LossReport.Comparison(measures), traced)));
             var revision = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, revisePrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
             journal.AddTrialTokens(id, "codeur", revision.Tokens);
             var revised = ReadOrEmpty(Path.Combine(codeDir, botFile));
@@ -212,7 +216,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     }
 
     /// <summary>Quick lab duel: at most <c>laboratoire.parties</c> games, never extended, nothing journaled.</summary>
-    private async Task<DuelOutcome> LabAsync(string candidateExe, string championSource, CancellationToken ct)
+    private async Task<(DuelOutcome Outcome, List<RaceMeasures> Measures)> LabAsync(string candidateExe, string championSource, CancellationToken ct)
     {
         var champion = await ctx.Builder.BuildAsync(championSource, ct);
         var n = ctx.Config.Laboratoire.Parties;
@@ -222,21 +226,43 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             PartiesMin = Math.Min(ctx.Config.Arene.PartiesMin, n),
             PartiesProlongation = n,
         };
+        var measures = new List<RaceMeasures>();
         using (Telemetry.Source.StartActivity("laboratoire"))
         {
-            return await new Duel(ctx.Referee, settings, log).RunAsync(candidateExe, champion.Executable!, null, ct);
+            var outcome = await new Duel(ctx.Referee, settings, log).RunAsync(candidateExe, champion.Executable!,
+                (seed, seat, r) =>
+                {
+                    if (RaceAnalysis.OfLocalGame(r, seat, seed, 0, "", "", ctx.Config.Analyse)?.Measures is { } m)
+                    {
+                        measures.Add(m);
+                    }
+                },
+                ct, relay: true);
+            return (outcome, measures);
         }
     }
 
     /// <summary>What the coder learns from the lab, in the language of its prompt.</summary>
-    public static string LabReport(DuelOutcome o, double rate)
+    public static string LabReport(DuelOutcome o, double rate, string? comparison = null, bool traced = true)
     {
         var sb = new StringBuilder("# Lab results of your previous version\n\n");
         sb.Append(CultureInfo.InvariantCulture,
             $"Quick games against the current champion: {o.Wins} wins, {o.Losses} losses, {o.Draws} draws ({rate:P0} win rate).\n\n");
+        if (comparison is not null)
+        {
+            sb.Append("Measured, your version vs the champion, per game: ").Append(comparison).Append(".\n\n");
+        }
+
         if (o.CandidateFault is not null)
         {
             sb.Append("Your version FAILED a game (crash, timeout or invalid output): ").Append(o.CandidateFault).Append("\n\n");
+        }
+
+        if (!traced)
+        {
+            sb.Append("Your version does NOT write the trace line of rule 6 to standard error. Add it exactly as the rule says: ")
+              .Append("on its first turn, given the four pods `").Append(string.Join(" / ", RaceAnalysis.ProbeInput[^4..]))
+              .Append("`, the bot must write the line `").Append(RaceAnalysis.ProbeTrace).Append("`.\n\n");
         }
 
         sb.Append("A version that loses clearly more than it wins against the champion usually hides a bug ")
@@ -303,9 +329,21 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         using (Telemetry.Source.StartActivity("duel"))
         {
             duel = await new Duel(ctx.Referee, cfg.Arene, log).RunAsync(candidateExe, championBuild.Executable!,
-                (seed, seat, r) => journal.AddLocalGame(id, seed, seat, Results.For(r, seat),
-                    r.Faults[seat] == FaultKind.None ? null : r.Detail),
-                ct);
+                (seed, seat, r) =>
+                {
+                    journal.AddLocalGame(id, seed, seat, Results.For(r, seat), r.Faults[seat] == FaultKind.None ? null : r.Detail);
+                    if (RaceAnalysis.OfLocalGame(r, seat, seed, id, hash, championHash, cfg.Analyse) is { } analysis)
+                    {
+                        journal.AddAnalysis(analysis);
+                    }
+                },
+                ct, relay: true);
+        }
+
+        // What the duel measured, candidate against champion: the agents see it in the history.
+        if (LossReport.Comparison(journal.TrialAnalyses(id).Select(a => a.Measures!).ToList()) is { } comparison)
+        {
+            journal.SetTrialMeasures(id, comparison);
         }
 
         if (duel.CandidateFault is not null)
@@ -495,6 +533,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             var entry = new ApiGameEntry(result.Log.GameId, hash, opponent, result.Log.Options,
                 result.Log.OutcomeFor(0).ToString(), result.Log.TestedCodeFaulted);
             ctx.Journal.AddApiGame(entry.GameId, hash, opponent, entry.Options, entry.Outcome, entry.Fault, trialId);
+            ctx.Journal.AddAnalysis(RaceAnalysis.OfGame("test", result.Log, hash, opponent, trialId, ctx.Config.Analyse));
             games.Add(entry);
         }
 
@@ -513,6 +552,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("STRATEGY.md", ReadOrEmpty(ctx.Paths.Strategy)),
             (cfg.Bot.Fichier, championSource),
             ("HISTORY.md", History(int.MaxValue)),
+            ("LOSSES.md", Losses(ctx.Journal.ChampionHash() ?? "")),
             ("GUIDANCE.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("PREVIOUS_ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
         var look = await AskAsync(id, new AgentRequest("regard_neuf", cfg.Agents.RegardNeuf, lookDir, lookPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
@@ -604,11 +644,15 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return sb.Append("No trial yet: this is the first one.\n").ToString();
         }
 
-        sb.Append("## Latest trials (most recent first)\n\n| # | Verdict | Idea | Against the champion | Reason |\n|---|---|---|---|---|\n");
+        sb.Append("## Latest trials (most recent first)\n\n")
+          .Append("Target: the cause of LOSSES.md the idea aimed at. Measured: candidate vs champion, average per local duel game ")
+          .Append("(runner pace in turns per checkpoint on collision-free stretches, lower is faster; hits suffered by the runner; ")
+          .Append("collisions between the bot's own pods).\n\n")
+          .Append("| # | Verdict | Target | Idea | Against the champion | Measured | Reason |\n|---|---|---|---|---|---|---|\n");
         foreach (var t in all.TakeLast(Math.Min(recent, all.Count)).Reverse())
         {
             sb.Append(CultureInfo.InvariantCulture,
-                $"| {t.Id} | {t.Verdict} | {Cell(t.Idea)} | {t.Wins} W / {t.Losses} L | {Cell(t.Reason)} |\n");
+                $"| {t.Id} | {t.Verdict} | {t.Target ?? "-"} | {Cell(t.Idea)} | {t.Wins} W / {t.Losses} L | {Cell(t.Measures ?? "-")} | {Cell(t.Reason)} |\n");
         }
 
         // The real leaderboard, the only goal: what each recent champion actually scored.
@@ -635,6 +679,28 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>LOSSES.md: why the champion loses its real games (ranked and confirmation games with a trace).</summary>
+    private string Losses(string championHash) =>
+        LossReport.ForAgents(ctx.Journal.Analyses(championHash, "battle", "test"), ctx.Config.Analyse);
+
+    /// <summary>The cause a note aims at: the first word after « TARGET: », if it names a known cause.</summary>
+    public static string? TargetOf(string note)
+    {
+        foreach (var raw in note.Split('\n'))
+        {
+            var l = raw.Trim().Trim('*').Trim().TrimStart('#', '-', ' ');
+            if (!l.StartsWith("TARGET", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var word = new string(l[6..].TrimStart(':', ' ', '*', '\t').TakeWhile(char.IsLetter).ToArray()).ToLowerInvariant();
+            return LossCauses.All.Contains(word) ? word : null;
+        }
+
+        return null;
     }
 
     /// <summary>

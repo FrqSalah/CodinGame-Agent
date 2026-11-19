@@ -67,6 +67,16 @@ public sealed record ContextSettings(int EssaisResumes, int IdeesRejetees);
 /// </summary>
 public sealed record LabSettings(int Parties, int RevisionsMax, double SeuilRevision);
 
+/// <summary>
+/// Loss analysis (2026-11-19). <paramref name="SeuilChoc"/>: distance between a pod's next state
+/// and its no-collision prediction above which it collided. A lost game is "blocking" when our
+/// runner was hit at least <paramref name="EcartChocs"/> times more than theirs, "speed" when it
+/// took at least <paramref name="EcartCadence"/> more turns per checkpoint on collision-free
+/// stretches, "finish" when lost by at most <paramref name="ArriveeSerree"/> checkpoints.
+/// <paramref name="PartiesClasseesParReleve"/>: ranked games read at each ranking (0: none).
+/// </summary>
+public sealed record AnalysisSettings(double SeuilChoc, int EcartChocs, double EcartCadence, int ArriveeSerree, int PartiesClasseesParReleve);
+
 /// <summary>Banc d'adversaires extérieurs : sources de bots publiés par d'autres joueurs (vide = pas de banc).</summary>
 public sealed record BenchSettings(IReadOnlyList<string> Adversaires, int PartiesParAdversaire, string Compilation);
 
@@ -85,7 +95,8 @@ public sealed record PipelineConfig(
     LoopSettings Boucle,
     ContextSettings Contexte,
     BenchSettings Banc,
-    LabSettings Laboratoire)
+    LabSettings Laboratoire,
+    AnalysisSettings Analyse)
 {
     /// <summary>Outils d'IA pris en charge.</summary>
     public static readonly string[] SupportedTools = ["agy"];
@@ -142,6 +153,11 @@ public sealed record PipelineConfig(
         Check(Laboratoire.Parties >= 0, "laboratoire.parties", "positif ou nul (0 : pas de laboratoire)");
         Check(Laboratoire.RevisionsMax >= 0, "laboratoire.revisions_max", "positif ou nul");
         Check(Laboratoire.SeuilRevision is >= 0 and <= 1, "laboratoire.seuil_revision", "entre 0 et 1");
+        Check(Analyse.SeuilChoc > 0, "analyse.seuil_choc", "positif");
+        Check(Analyse.EcartChocs >= 1, "analyse.ecart_chocs", "au moins 1");
+        Check(Analyse.EcartCadence > 0, "analyse.ecart_cadence", "positif");
+        Check(Analyse.ArriveeSerree >= 0, "analyse.arrivee_serree", "positif ou nul");
+        Check(Analyse.PartiesClasseesParReleve >= 0, "analyse.parties_classees_par_releve", "positif ou nul (0 : aucune)");
         Check(Api.ConfirmationJoueurs == 0 || Api.ConfirmationRangsAuDessus >= Api.ConfirmationJoueurs,
             "api.confirmation_rangs_au_dessus", "au moins api.confirmation_joueurs");
         Check(Boucle.EssaisParJour >= 0, "boucle.essais_par_jour", "positif ou nul");
