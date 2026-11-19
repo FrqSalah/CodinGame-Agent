@@ -62,6 +62,7 @@ public class RefereeGameTests
         var exe = await BuildSeedBotAsync();
         var game = new RefereeGame(Referee!);
         var deviations = new List<int>();
+        var unclear = new List<string>();
         var collisions = 0;
         for (var seed = 1; seed <= 4; seed++)
         {
@@ -69,14 +70,32 @@ public class RefereeGameTests
             await using var b = BotProcess.Start(exe);
             var result = await game.PlayAsync([a, b], seed, Limits, TestContext.Current.CancellationToken, relay: true);
             var turns = CodinGame.Core.Analysis.RaceAnalysis.FromRelay(result.Relay!)!;
-            deviations.AddRange(CodinGame.Core.Analysis.RaceAnalysis.Deviations(turns));
+            for (var t = 0; t + 1 < turns.Count; t++)
+            {
+                for (var k = 0; k < 4; k++)
+                {
+                    // A shielded pod is ten times heavier: when hit, it barely moves (its partner shows the collision).
+                    if (turns[t].Commands[k].Shield)
+                    {
+                        continue;
+                    }
+
+                    var d = CodinGame.Core.Analysis.RaceAnalysis.Deviation(turns[t].Pods[k], turns[t].Commands[k], turns[t + 1].Pods[k]);
+                    deviations.Add(d);
+                    if (d is > 5 and <= 25)
+                    {
+                        unclear.Add($"seed {seed} turn {t} pod {k} dev {d}: {turns[t].Pods[k]} {turns[t].Commands[k]} -> {turns[t + 1].Pods[k]}");
+                    }
+                }
+            }
+
             var m = CodinGame.Core.Analysis.RaceAnalysis.Measure(turns, 25);
             collisions += m.Us.RunnerHits + m.Them.RunnerHits + m.Us.OwnHits + m.Them.OwnHits;
         }
 
         Assert.True(deviations.Count > 1000);
-        Assert.True(deviations.Count(d => d is > 5 and <= 25) <= deviations.Count / 200,
-            $"deviations between 5 and 25: {deviations.Count(d => d is > 5 and <= 25)} of {deviations.Count}");
+        Assert.True(unclear.Count <= deviations.Count / 200,
+            $"deviations between 5 and 25: {unclear.Count} of {deviations.Count}\n{string.Join('\n', unclear.Take(12))}");
         Assert.True(collisions > 0);
     }
 

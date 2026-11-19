@@ -9,8 +9,12 @@ namespace CodinGame.Core.Analysis;
 /// <summary>One pod at the start of a turn, as the game input gives it.</summary>
 public readonly record struct PodState(int X, int Y, int Vx, int Vy, int Angle, int Next);
 
-/// <summary>What a pod did this turn: a target and a thrust (650 = BOOST). No target: shield or engine reloading.</summary>
-public readonly record struct PodCommand(int? Tx, int? Ty, int Thrust);
+/// <summary>
+/// What a pod did this turn: a target and a thrust (650 = BOOST). No target: shield or engine
+/// reloading. <paramref name="Shield"/>: the pod raised its shield this turn (ten times heavier: when
+/// hit, it barely moves, and its partner in the collision is the one far from its prediction).
+/// </summary>
+public readonly record struct PodCommand(int? Tx, int? Ty, int Thrust, bool Shield = false);
 
 /// <summary>One turn seen from one player: its pods are 0 and 1, the opponent's 2 and 3.</summary>
 public sealed record RaceTurn(PodState[] Pods, PodCommand[] Commands);
@@ -292,7 +296,7 @@ public static partial class RaceAnalysis
             var what = m.Groups[3].Value;
             var target = TargetAndPower().Match(what);
             current[k] = !target.Success
-                ? new PodCommand(null, null, 0)
+                ? new PodCommand(null, null, 0, what.Contains("shield", StringComparison.Ordinal))
                 : new PodCommand(Int(target.Groups[1].Value), Int(target.Groups[2].Value),
                     what.StartsWith("boosts", StringComparison.Ordinal) ? 650 : target.Groups[3].Success ? Int(target.Groups[3].Value) : 0);
             if (current.All(c => c is not null))
@@ -370,7 +374,7 @@ public static partial class RaceAnalysis
         PodCommand Shield(int k)
         {
             reload[k] = 3;
-            return new PodCommand(null, null, 0);
+            return new PodCommand(null, null, 0, Shield: true);
         }
     }
 

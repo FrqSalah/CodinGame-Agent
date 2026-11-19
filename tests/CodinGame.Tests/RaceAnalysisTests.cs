@@ -139,7 +139,7 @@ public class RaceAnalysisTests
         var turns = RaceAnalysis.FromGameLog(log)!;
 
         Assert.Equal(2, turns.Count);   // three trace lines, commands for two turns
-        Assert.Equal(new PodCommand(null, null, 0), turns[0].Commands[0]);   // our pod 1: shield
+        Assert.Equal(new PodCommand(null, null, 0, Shield: true), turns[0].Commands[0]);   // our pod 1: shield
         Assert.Equal(new PodCommand(5, 6, 200), turns[0].Commands[1]);
         Assert.Equal(new PodCommand(100, 200, 50), turns[0].Commands[2]);
         Assert.Equal(new PodCommand(300, 400, 650), turns[0].Commands[3]);   // their boost
@@ -171,6 +171,8 @@ public class RaceAnalysisTests
         Assert.Equal(0, turns[3].Commands[1].Thrust);
         Assert.Equal(200, turns[4].Commands[1].Thrust);   // ...for three turns
         Assert.Equal(100, turns[1].Commands[2].Thrust);
+        Assert.True(turns[0].Commands[1].Shield);
+        Assert.False(turns[1].Commands[1].Shield);
     }
 
     [Fact]
