@@ -89,6 +89,7 @@ public static class StatusPage
         Tile(html, "Score", last.Score.ToString("0.00", Fr), Delta(last.Score - first.Score, $"depuis le {first.At.ToString("d MMM", Fr)}", "points"));
         Tile(html, $"Ligue {E(last.League)}", $"{last.LeagueRank.ToString("N0", Fr)}<small> / {last.LeagueTotal.ToString("N0", Fr)}</small>",
             last.Percentage < 100 ? $"<span class=\"muted\">classement en cours : {last.Percentage} %</span>" : "<span class=\"muted\">classement stable</span>");
+        RecordTile(html, d.Rankings, last);
         html.Append("</div>");
 
         // Un relevé en retard se voit : sinon la page affiche un classement périmé sans le dire.
@@ -227,6 +228,26 @@ public static class StatusPage
         return svg.ToString();
     }
 
+    /// <summary>
+    /// Best world rank ever held. Only fully ranked readings count: while a new submission is being
+    /// ranked, its rank swings and a passing peak would become a record never really held.
+    /// </summary>
+    private static void RecordTile(StringBuilder html, IReadOnlyList<RankingEntry> rankings, RankingEntry last)
+    {
+        var best = rankings.Where(r => r.Percentage >= 100).OrderBy(r => r.Rank).ThenBy(r => r.At).FirstOrDefault();
+        if (best is null)
+        {
+            Tile(html, "Meilleur rang", "—", "<span class=\"muted\">aucun relevé stable</span>");
+            return;
+        }
+
+        var gap = last.Rank - best.Rank;
+        var note = last.Percentage >= 100 && gap <= 0
+            ? $"<span class=\"up\">record actuel</span> <span class=\"muted\">depuis le {best.At.ToString("d MMM", Fr)}</span>"
+            : $"<span class=\"muted\">le {best.At.ToString("d MMM", Fr)} · actuel à {gap.ToString("N0", Fr)} place{(gap > 1 ? "s" : "")}</span>";
+        Tile(html, "Meilleur rang", best.Rank.ToString("N0", Fr), note);
+    }
+
     private static void Tile(StringBuilder html, string label, string value, string note) =>
         html.Append($"<div class=\"tile\"><div class=\"label\">{label}</div><div class=\"value\">{value}</div><div class=\"note\">{note}</div></div>");
 
@@ -280,7 +301,7 @@ public static class StatusPage
         section.grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; background:none; border:0; padding:0; }
         .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; min-width:0; }
         .muted { color:var(--muted); } p { margin:6px 0; }
-        .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:12px; }
+        .tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:12px; }
         .tile { border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
         .tile .label { color:var(--muted); font-size:13px; } .tile .value { font-size:28px; font-weight:650; font-variant-numeric:tabular-nums; }
         .tile .value small { font-size:14px; color:var(--muted); font-weight:400; } .tile .note { font-size:13px; }
@@ -309,9 +330,8 @@ public static class StatusPage
           header { padding-top:16px; } h1 { font-size:19px; }
           section, .card { padding:14px; border-radius:10px; margin:12px 0; }
           section.grid { grid-template-columns:1fr; gap:0; }
-          /* Chiffres clés : le rang en entier, score et ligue côte à côte. */
+          /* Key figures: two per row. */
           .tiles { grid-template-columns:1fr 1fr; gap:8px; }
-          .tiles .tile:first-child { grid-column:1 / -1; }
           .tile { padding:10px 12px; } .tile .value { font-size:24px; } .tile .note { font-size:12px; }
           /* La courbe est réduite à l'écran : ses textes sont agrandis d'autant. */
           .chart .axis { font-size:24px; } .chart .line { stroke-width:4; } .chart .pt { r:5; }

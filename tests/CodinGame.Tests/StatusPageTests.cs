@@ -51,6 +51,33 @@ public class StatusPageTests
     }
 
     [Fact]
+    public void Shows_the_best_rank_held_ignoring_peaks_while_ranking()
+    {
+        var html = StatusPage.Render(Data(
+        [
+            new RankingEntry(Now.AddDays(-2), 102, 236_700, 40.67, "Legend", 102, 2297, 100),
+            new RankingEntry(Now.AddDays(-1), 90, 236_700, 41.14, "Legend", 90, 2297, 41),
+            new RankingEntry(Now, 105, 236_714, 40.6, "Legend", 105, 2297, 100),
+        ]));
+
+        Assert.Contains("Meilleur rang</div><div class=\"value\">102</div>", html);
+        Assert.Contains("actuel à 3 places", html);
+    }
+
+    [Fact]
+    public void Says_when_the_current_rank_is_the_record()
+    {
+        var html = StatusPage.Render(Data(
+        [
+            new RankingEntry(Now.AddDays(-1), 120, 236_700, 40.0, "Legend", 120, 2297, 100),
+            new RankingEntry(Now, 103, 236_714, 40.67, "Legend", 103, 2297, 100),
+        ]));
+
+        Assert.Contains("Meilleur rang</div><div class=\"value\">103</div>", html);
+        Assert.Contains("record actuel", html);
+    }
+
+    [Fact]
     public void Renders_before_the_first_ranking_is_recorded()
     {
         var html = StatusPage.Render(Data([]));
