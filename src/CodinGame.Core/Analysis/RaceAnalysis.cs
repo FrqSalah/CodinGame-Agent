@@ -74,14 +74,18 @@ public static class LossCauses
 /// </summary>
 public static partial class RaceAnalysis
 {
-    /// <summary>Distance between a pod's next state and the no-collision prediction (position or speed).</summary>
-    public static int Deviation(PodState p, PodCommand c, PodState next)
+    /// <summary>
+    /// Distance between a pod's next state and the no-collision prediction (position or speed).
+    /// <paramref name="first"/>: the first turn, where a pod turns freely. Not told by the angle:
+    /// CodinGame gives -1 then 0 to 359, the local engine gives negative angles all game long.
+    /// </summary>
+    public static int Deviation(PodState p, PodCommand c, PodState next, bool first = false)
     {
         double a = p.Angle;
         if (c.Tx is { } tx && c.Ty is { } ty)
         {
             var want = Math.Atan2(ty - p.Y, tx - p.X) * 180 / Math.PI;
-            a = p.Angle < 0 ? want : p.Angle + Math.Clamp(((want - p.Angle + 540) % 360) - 180, -18, 18);
+            a = first ? want : p.Angle + Math.Clamp(((want - p.Angle + 540) % 360) - 180, -18, 18);
         }
 
         var vx = p.Vx + Math.Cos(a * Math.PI / 180) * c.Thrust;
@@ -94,7 +98,7 @@ public static partial class RaceAnalysis
     /// <summary>Every deviation of every pod in a game: a clean game has small ones and collisions, nothing between.</summary>
     public static IEnumerable<int> Deviations(IReadOnlyList<RaceTurn> turns) =>
         Enumerable.Range(0, Math.Max(0, turns.Count - 1))
-            .SelectMany(t => Enumerable.Range(0, 4).Select(k => Deviation(turns[t].Pods[k], turns[t].Commands[k], turns[t + 1].Pods[k])));
+            .SelectMany(t => Enumerable.Range(0, 4).Select(k => Deviation(turns[t].Pods[k], turns[t].Commands[k], turns[t + 1].Pods[k], t == 0)));
 
     public static RaceMeasures Measure(IReadOnlyList<RaceTurn> turns, double collisionThreshold)
     {
@@ -109,7 +113,7 @@ public static partial class RaceAnalysis
         {
             var now = turns[t];
             var next = turns[t + 1].Pods;
-            var hit = Enumerable.Range(0, 4).Where(k => Deviation(now.Pods[k], now.Commands[k], next[k]) > collisionThreshold).ToList();
+            var hit = Enumerable.Range(0, 4).Where(k => Deviation(now.Pods[k], now.Commands[k], next[k], t == 0) > collisionThreshold).ToList();
 
             // Each pod far from its prediction collided with the nearest pod that also deviated, or
             // else with the nearest pod (a shielded pod, ten times heavier, barely moves).

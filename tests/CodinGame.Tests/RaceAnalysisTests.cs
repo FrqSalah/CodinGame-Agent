@@ -13,13 +13,13 @@ public class RaceAnalysisTests
     private static readonly PodCommand Idle = new(null, null, 0);
 
     /// <summary>The engine's move for a pod that hits nothing (ENGINE.md), to build test races.</summary>
-    private static PodState Move(PodState p, PodCommand c)
+    private static PodState Move(PodState p, PodCommand c, bool first = false)
     {
         double a = p.Angle;
         if (c.Tx is { } tx && c.Ty is { } ty)
         {
             var want = Math.Atan2(ty - p.Y, tx - p.X) * 180 / Math.PI;
-            a = p.Angle < 0 ? want : p.Angle + Math.Clamp(((want - p.Angle + 540) % 360) - 180, -18, 18);
+            a = first ? want : p.Angle + Math.Clamp(((want - p.Angle + 540) % 360) - 180, -18, 18);
         }
 
         var vx = p.Vx + Math.Cos(a * Math.PI / 180) * c.Thrust;
@@ -43,11 +43,13 @@ public class RaceAnalysisTests
     {
         var target = new PodCommand(1000, 5000, 100);   // straight down: 90°
         var turning = new PodState(1000, 1000, 0, 0, 0, 1);
-        var first = turning with { Angle = -1 };
+        var negative = turning with { Angle = -40 };    // the local engine's angles can be negative
 
         Assert.Equal(0, RaceAnalysis.Deviation(turning, target, Move(turning, target)));
-        Assert.Equal(1000, Move(first, target).X);       // faces the target at once
-        Assert.NotEqual(1000, Move(turning, target).X);  // still turning
+        Assert.Equal(0, RaceAnalysis.Deviation(turning with { Angle = -1 }, target, Move(turning with { Angle = -1 }, target, first: true), first: true));
+        Assert.Equal(1000, Move(turning with { Angle = -1 }, target, first: true).X);   // faces the target at once
+        Assert.NotEqual(1000, Move(turning, target).X);                                  // still turning
+        Assert.True(RaceAnalysis.Deviation(negative, target, Move(negative, target, first: true)) > 25);
     }
 
     /// <summary>

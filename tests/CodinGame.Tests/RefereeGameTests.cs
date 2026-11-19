@@ -80,7 +80,7 @@ public class RefereeGameTests
                         continue;
                     }
 
-                    var d = CodinGame.Core.Analysis.RaceAnalysis.Deviation(turns[t].Pods[k], turns[t].Commands[k], turns[t + 1].Pods[k]);
+                    var d = CodinGame.Core.Analysis.RaceAnalysis.Deviation(turns[t].Pods[k], turns[t].Commands[k], turns[t + 1].Pods[k], t == 0);
                     deviations.Add(d);
                     if (d is > 5 and <= 25)
                     {
