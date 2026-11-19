@@ -196,9 +196,12 @@ async Task<int> Check()
             Console.WriteLine($"         modèles écartés (limite atteinte) : {string.Join(", ", chain.Blocked().Select(b => $"{b.Key} jusqu'à {b.Value:HH:mm} UTC"))}");
         }
 
-        if (await host.Services.GetRequiredService<CodinGameClient>().TestGamesLeftAsync(ctx.Config.Jeu, ct) is { } left)
+        var windows = await host.Services.GetRequiredService<CodinGameClient>().TestGameWindowsAsync(ctx.Config.Jeu, ct);
+        if (windows.Count > 0)
         {
-            Console.WriteLine($"         parties de test restantes : {left}");
+            // Every window, not just the tightest: 10 left out of 10 per minute is not a shortage.
+            Console.WriteLine($"         parties de test restantes : {string.Join(", ", windows.Select(w => $"{w.Name.Replace("test_games_", "")} {w.Remaining}/{w.Limit}"))}");
+            Console.WriteLine($"         une confirmation en demande {ctx.Config.Api.ConfirmationCost}");
         }
     }
 

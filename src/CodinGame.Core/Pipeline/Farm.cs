@@ -108,13 +108,8 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                 return false;
             }
 
-            var needed = cfg.Api.ConfirmationCost;
-            if (needed > 0 && await api.TestGameShortfallAsync(cfg.Jeu, needed, ct) is { } shortfall)
-            {
-                Pause(name, TimeSpan.FromMinutes(30), $"CodinGame : {shortfall}", LogLevel.Information);
-                return false;
-            }
-
+            // The test game quota is checked when a candidate reaches the confirmation, not here:
+            // most candidates never get there, and a trial should not wait for games it won't play.
             Status(name, "essai en cours", LogLevel.Information);
             var verdict = await new Trial(ctx, api, agents, log).RunAsync(ct);
             if (verdict.Verdict == Verdicts.AgentFailure)

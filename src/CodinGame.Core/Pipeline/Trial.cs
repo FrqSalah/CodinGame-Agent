@@ -353,6 +353,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         {
             using (Telemetry.Source.StartActivity("confirmation"))
             {
+                await WaitForTestGamesAsync(cfg.Api.ConfirmationCost, ct);
                 var opponents = await ConfirmationOpponentsAsync(ct);
                 var championGames = new List<ApiGameEntry>();
                 var candidateGames = new List<ApiGameEntry>();
@@ -420,6 +421,29 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         var (plus, minus, cw, chw) = Bench.Compare(cases, candidate, champion);
         return (new BenchOutcome(cases.Count, cw, chw, plus, minus), null);
+    }
+
+    /// <summary>Longest wait for the test game quota before giving up on a confirmation (the 6-hour window).</summary>
+    private static readonly TimeSpan MaxQuotaWait = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// Waits until CodinGame's large windows can hold the whole confirmation: a candidate that won
+    /// its duel is worth waiting for. Beyond <see cref="MaxQuotaWait"/>, the quota pause takes over.
+    /// </summary>
+    private async Task WaitForTestGamesAsync(int needed, CancellationToken ct)
+    {
+        var waited = TimeSpan.Zero;
+        while (await api.TestGameShortfallAsync(ctx.Config.Jeu, needed, ct) is { } shortfall)
+        {
+            if (waited >= MaxQuotaWait)
+            {
+                throw new QuotaExhaustedException($"Confirmation impossible : {shortfall}", TimeSpan.FromMinutes(30));
+            }
+
+            log.LogInformation("Confirmation : {Manque}, nouvelle vérification dans 5 min", shortfall);
+            await Task.Delay(TimeSpan.FromMinutes(5), ct);
+            waited += TimeSpan.FromMinutes(5);
+        }
     }
 
     /// <summary>

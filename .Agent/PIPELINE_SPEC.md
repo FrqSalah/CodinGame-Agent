@@ -168,6 +168,8 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   candidate), the quota check compared that need with the 10-per-minute window and paused the
   farm for about 29 hours. Only windows large enough to hold the need count now, and test games
   wait for an empty short window to refill instead of failing.
+- **2026-11-19**: the test game quota is checked when a candidate reaches the confirmation
+  (waiting up to 6 hours), no longer before every trial; `farm verifier` shows every window.
 
 ## 11. Still unverified
 

@@ -161,13 +161,17 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
     /// windows large enough to hold them count: the short ones (10 per minute...) refill while the
     /// games are played, and <see cref="PlayTestGameAsync"/> paces itself on them.
     /// </summary>
-    public async Task<string?> TestGameShortfallAsync(string puzzle, int needed, CancellationToken ct)
+    public async Task<string?> TestGameShortfallAsync(string puzzle, int needed, CancellationToken ct) =>
+        TestGameShortfall(await TestGameWindowsAsync(puzzle, ct), needed);
+
+    /// <summary>Every test game window of the puzzle: name, limit and games left.</summary>
+    public async Task<IReadOnlyList<(string Name, int Limit, int Remaining)>> TestGameWindowsAsync(string puzzle, CancellationToken ct)
     {
         var r = await SendAsync(HttpMethod.Get, $"/limits?puzzle={puzzle}", null, ct);
         return r.TryGetProperty("test_games", out var windows) && windows.ValueKind == JsonValueKind.Array
-            ? TestGameShortfall(windows.EnumerateArray().Select(w => (
-                w.GetProperty("name").GetString() ?? "?", w.GetProperty("limit").GetInt32(), w.GetProperty("remaining").GetInt32())), needed)
-            : null;
+            ? windows.EnumerateArray().Select(w => (
+                w.GetProperty("name").GetString() ?? "?", w.GetProperty("limit").GetInt32(), w.GetProperty("remaining").GetInt32())).ToList()
+            : [];
     }
 
     /// <summary>The first window whose limit can hold <paramref name="needed"/> games but whose remainder cannot.</summary>
@@ -175,13 +179,6 @@ public sealed class CodinGameClient(HttpClient http, string tokenFile, ILogger<C
         windows.Where(w => w.Limit >= needed && w.Remaining < needed)
             .Select(w => $"{w.Remaining} test games left in window {w.Name}, {needed} needed")
             .FirstOrDefault();
-
-    /// <summary>Parties de test restantes sur la fenêtre la plus contraignante, ou null si inconnu.</summary>
-    public async Task<int?> TestGamesLeftAsync(string puzzle, CancellationToken ct)
-    {
-        var r = await SendAsync(HttpMethod.Get, $"/limits?puzzle={puzzle}", null, ct);
-        return MinRemaining(r, "test_games");
-    }
 
     /// <summary>Until when a test game window is empty, read from the last responses: test games wait for it instead of hitting 429.</summary>
     private DateTime _testGamesBlockedUntil = DateTime.MinValue;
