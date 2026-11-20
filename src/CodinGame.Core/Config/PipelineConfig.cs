@@ -56,7 +56,8 @@ public sealed record LoopSettings(
     int CorrectionsCompilationMax,
     int RelancesReponseVide,
     int PauseMinutesSiEchecAgent,
-    int PauseMinutesSiInactif);
+    int PauseMinutesSiInactif,
+    int MotsNoteMax);
 
 public sealed record ContextSettings(int EssaisResumes, int IdeesRejetees);
 
@@ -164,6 +165,7 @@ public sealed record PipelineConfig(
         Check(Boucle.RejetsAvantRegardNeuf >= 1, "boucle.rejets_avant_regard_neuf", "au moins 1");
         Check(Boucle.CorrectionsCompilationMax >= 0, "boucle.corrections_compilation_max", "positif ou nul");
         Check(Boucle.RelancesReponseVide is >= 0 and <= 5, "boucle.relances_reponse_vide", "entre 0 et 5");
+        Check(Boucle.MotsNoteMax >= 50, "boucle.mots_note_max", "au moins 50");
         Check(Boucle.PauseMinutesSiEchecAgent >= 1 && Boucle.PauseMinutesSiInactif >= 1, "boucle.pause_minutes_*", "au moins 1");
         Check(Contexte.EssaisResumes >= 1, "contexte.essais_resumes", "au moins 1");
         Check(Contexte.IdeesRejetees >= 1, "contexte.idees_rejetees", "au moins 1");

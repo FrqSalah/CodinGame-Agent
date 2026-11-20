@@ -17,6 +17,9 @@ public static class Verdicts
     public const string Fault = "FAUTE";
     public const string NoCompile = "NON_COMPILE";
     public const string AgentFailure = "ECHEC_AGENT";
+
+    /// <summary>The thinker's note was unusable twice (no idea, no target, too long): no code was written.</summary>
+    public const string BadNote = "NOTE_REFUSEE";
 }
 
 public sealed record TrialVerdict(string Verdict, string Reason);
@@ -109,18 +112,40 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             ("LOSSES.md", Losses(championHash)),
             ("GUIDANCE.md", ReadOrEmpty(ctx.Paths.UserGuidance())),
             ("ORIENTATION.md", ReadOrEmpty(ctx.Paths.Orientation)));
-        var think = await AskAsync(id, new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
+        var thinkRequest = new AgentRequest("penseur", cfg.Agents.Penseur, thinkDir, thinkPrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes));
+        var think = await AskAsync(id, thinkRequest, ct);
         if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
         {
             return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
         }
 
+        // A note the coder could not use is asked again once, with what is wrong in it.
+        var thinkTask = await File.ReadAllTextAsync(Path.Combine(thinkDir, "TASK.md"), ct);
         var note = AnswerOf(think.Response.Trim());
+        var problems = NoteProblems(note, thinkTask, cfg.Boucle.MotsNoteMax);
+        if (problems.Count > 0)
+        {
+            log.LogWarning("Essai {Essai} : note du penseur refusée ({Problemes}), nouvelle demande", id, string.Join(" ; ", problems));
+            await File.WriteAllTextAsync(Path.Combine(dir, "note-refusee.md"), think.Response, ct);
+            think = await AskAsync(id, thinkRequest with { Prompt = thinkPrompt + Refusal(problems) }, ct);
+            if (!think.Success || string.IsNullOrWhiteSpace(think.Response))
+            {
+                return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
+            }
+
+            note = AnswerOf(think.Response.Trim());
+            problems = NoteProblems(note, thinkTask, cfg.Boucle.MotsNoteMax);
+        }
+
         var idea = IdeaOf(note);
         await File.WriteAllTextAsync(Path.Combine(dir, "note.md"), note, ct);
         journal.SetTrialNote(id, idea, note);
         journal.SetTrialTarget(id, TargetOf(note));
         log.LogInformation("Essai {Essai} : idée — {Idee}", id, idea);
+        if (problems.Count > 0)
+        {
+            return (new TrialVerdict(Verdicts.BadNote, $"note du penseur refusée deux fois : {string.Join(" ; ", problems)}"), null);
+        }
 
         // 2. Codeur : applique la note, et rien d'autre.
         var codeDir = Path.Combine(dir, "codeur");
@@ -667,7 +692,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             }
         }
 
-        var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not null && t.Idea is not null)
+        // A refused note was never coded: its idea was not tried.
+        var rejected = all.Where(t => t.Verdict is not Verdicts.Kept and not Verdicts.BadNote and not null && t.Idea is not null)
             .TakeLast(ctx.Config.Contexte.IdeesRejetees).ToList();
         if (rejected.Count > 0)
         {
@@ -734,7 +760,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     /// L'idée d'une note : le texte après « IDEE : », sur la même ligne ou, si le modèle est passé
     /// à la ligne, sur la première ligne non vide qui suit.
     /// </summary>
-    public static string IdeaOf(string note)
+    public static string IdeaOf(string note) =>
+        Clip(LabeledIdea(note) ?? note.Split('\n').Select(l => l.Trim().Trim('*').Trim()).FirstOrDefault(l => l.Length > 0) ?? "", 200);
+
+    /// <summary>The text after the idea label, or null when the note has no idea label.</summary>
+    private static string? LabeledIdea(string note)
     {
         var lines = note.Split('\n').Select(l => l.Trim().Trim('*').Trim()).ToList();
         for (var i = 0; i < lines.Count; i++)
@@ -752,13 +782,49 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
                 if (value.Length > 0)
                 {
-                    return Clip(value, 200);
+                    return value;
                 }
             }
         }
 
-        return Clip(lines.FirstOrDefault(l => l.Length > 0) ?? "", 200);
+        return null;
     }
+
+    /// <summary>
+    /// What makes a thinker's note unusable, written for the thinker; empty when the note is fine.
+    /// <paramref name="task"/> is the thinker's prompt: an idea found in it was copied from the format.
+    /// </summary>
+    public static List<string> NoteProblems(string note, string task, int maxWords)
+    {
+        var problems = new List<string>();
+        var idea = LabeledIdea(note);
+        if (idea is null)
+        {
+            problems.Add("there is no IDEA: line");
+        }
+        else if (task.Contains(idea, StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add($"the IDEA line (\"{Clip(idea, 60)}\") is copied from the format of the task instead of stating your idea");
+        }
+
+        if (TargetOf(note) is null)
+        {
+            problems.Add($"there is no TARGET: line naming one cause: {string.Join(", ", LossCauses.All)}");
+        }
+
+        var words = note.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        if (words > maxWords)
+        {
+            problems.Add($"the note has {words} words, the limit is {maxWords}: write only the final note, without your reasoning");
+        }
+
+        return problems;
+    }
+
+    private static string Refusal(IEnumerable<string> problems) =>
+        "\n\n---\n\n# A previous answer to this task was refused\n\n"
+        + string.Concat(problems.Select(p => $"- {p.TrimEnd('.')}.\n"))
+        + "\nWrite the note again, in the format of the task and nothing else.\n";
 
     private static string Label(Config.AgentRole r) => $"{r.Outil}/{r.Modele}";
 

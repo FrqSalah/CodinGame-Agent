@@ -1,6 +1,6 @@
 # Your task: propose ONE improvement to the bot
 
-**Your answer is at most 400 words.** A longer answer is cut off and the trial is lost.
+**Your answer is at most {mots_note} words.** A longer answer is refused.
 Think as long as you need, but write only the final note: no reasoning, no full code, no
 alternatives.
 
@@ -52,4 +52,4 @@ CHANGE: what to modify, where in the code, with exact formulas and values, and t
 behavior. Precise enough for another developer to apply it without guessing.
 RISK: what could go wrong (computation time, edge cases).
 
-The whole note fits in fewer than 400 words: no full code, only what changes.
+The whole note fits in fewer than {mots_note} words: no full code, only what changes.

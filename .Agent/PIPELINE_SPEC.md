@@ -10,7 +10,8 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
 ```
  LOSS ANALYSIS           ── why the champion loses its real games (LOSSES.md)
      │
- THINKER (Antigravity)   ── note: one idea, the cause it targets, what to change, why
+ THINKER (Antigravity)   ── note: one idea, the cause it targets, what to change, why;
+     │                      an unusable note is asked again once
      │
  CODER   (Antigravity)   ── applies the note to the C++ bot
      │
@@ -22,7 +23,7 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
      │
  CONFIRMATION            ── CodinGame test games vs 6 real players ranked above us, same maps
      │                      as the champion
- VERDICT                 ── GARDE (new champion, submitted) or JETE / FAUTE / NON_COMPILE / ECHEC_AGENT
+ VERDICT                 ── GARDE (new champion, submitted) or JETE / FAUTE / NON_COMPILE / ECHEC_AGENT / NOTE_REFUSEE
      │
  JOURNAL (matches.db)    ──► read by the thinker at the next trial
      │
@@ -204,6 +205,11 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
 - **2026-11-20**: the thinker's note starts at its last `IDEA:` label. Trial 189's thinker sent
   its draft first (the prompt's format quoted, a word count) and the idea was read as « one
   sentence. »; the draft is now dropped before the idea, the target and the coder's note.
+  The note is then checked: an idea label whose text is not copied from the prompt, a known
+  target, at most `boucle.mots_note_max` words (also the limit the prompt states). A failing
+  note is asked again once with its problems; a second failure ends the trial as
+  `NOTE_REFUSEE` (no pause, not listed among the ideas tried), counted on the status page. On
+  the 17 notes since the target line, only one (454 words) would have been asked again.
 
 ## 12. Still unverified
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using CodinGame.Core.Arena;
 using CodinGame.Core.Config;
 using CodinGame.Core.Data;
@@ -58,5 +59,6 @@ public sealed class PipelineContext(string name, PipelinePaths paths, PipelineCo
         .Replace("{jeu}", Config.Jeu)
         .Replace("{ligue}", string.Join(" / ", Config.Ligues))
         .Replace("{langage}", Config.Langage)
-        .Replace("{fichier}", Config.Bot.Fichier);
+        .Replace("{fichier}", Config.Bot.Fichier)
+        .Replace("{mots_note}", Config.Boucle.MotsNoteMax.ToString(CultureInfo.InvariantCulture));
 }

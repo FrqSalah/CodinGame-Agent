@@ -51,6 +51,29 @@ public class IdeaTests
         Assert.Equal("blocking", Trial.TargetOf(note));
     }
 
+    private const string Task = "Format of your answer:\nIDEA: one sentence.\nTARGET: one word: blocking, speed, finish, fault or other.\n";
+
+    [Fact]
+    public void A_good_note_passes_the_checks() =>
+        Assert.Empty(Trial.NoteProblems("IDEA: Aim at the apex.\nTARGET: speed\nWHY: ...\nCHANGE: ...", Task, 400));
+
+    [Theory]
+    [InlineData("IDEA: one sentence.\nTARGET: speed", "copied from the format")]
+    [InlineData("Aim at the apex.\nTARGET: speed", "no IDEA: line")]
+    [InlineData("IDEA: Aim at the apex.\nTARGET: the corners", "no TARGET: line")]
+    [InlineData("IDEA: Aim at the apex.\nWHY: ...", "no TARGET: line")]
+    public void An_unusable_note_is_refused_with_the_reason(string note, string reason) =>
+        Assert.Contains(Trial.NoteProblems(note, Task, 400), p => p.Contains(reason));
+
+    [Fact]
+    public void A_note_over_the_word_limit_is_refused()
+    {
+        var note = "IDEA: Aim at the apex.\nTARGET: speed\nWHY: " + string.Join(' ', Enumerable.Repeat("word", 30));
+
+        Assert.Empty(Trial.NoteProblems(note, Task, 40));
+        Assert.Contains(Trial.NoteProblems(note, Task, 20), p => p.Contains("words, the limit is 20"));
+    }
+
     [Theory]
     [InlineData("**IDEA:** Aim at the apex.\nWHY: ...", "**IDEA:** Aim at the apex.\nWHY: ...")]
     [InlineData("Draft.\n## IDEA: Aim at the apex.", "## IDEA: Aim at the apex.")]

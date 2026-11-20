@@ -43,7 +43,8 @@
     "corrections_compilation_max": 2,
     "relances_reponse_vide": 1,
     "pause_minutes_si_echec_agent": 60,
-    "pause_minutes_si_inactif": 5
+    "pause_minutes_si_inactif": 5,
+    "mots_note_max": 400
   },
   "contexte": {
     "essais_resumes": 15,

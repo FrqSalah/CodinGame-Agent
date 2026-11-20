@@ -98,4 +98,19 @@ public class StatusPageTests
         Assert.Contains("Aucun relevé encore", html);
         Assert.DoesNotContain("<svg", html);
     }
+
+    [Fact]
+    public void Warns_about_refused_thinker_notes_only_when_there_are_some()
+    {
+        var clean = StatusPage.Render(Data([]));
+        var data = Data([]);
+        var refused = StatusPage.Render(data with
+        {
+            Trials = [.. data.Trials, new TrialSummary(122, Now.AddMinutes(-30).ToString("O"), "NOTE_REFUSEE", "note du penseur refusée deux fois : there is no IDEA: line", null, 0, 0, 0, "p", "c")],
+        });
+
+        Assert.DoesNotContain("note(s) du penseur refusée(s)", clean);
+        Assert.Contains("<span class='down'>1 note(s) du penseur refusée(s)</span>", refused);
+        Assert.Contains("<span class=\"badge failed\">NOTE_REFUSEE</span>", refused);
+    }
 }

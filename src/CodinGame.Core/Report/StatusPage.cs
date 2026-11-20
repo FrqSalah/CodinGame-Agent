@@ -153,7 +153,9 @@ public static class StatusPage
         html.Append(d.Current is { } cur
             ? $"<p><span class=\"dot live\"></span>Essai <b>#{cur.Id}</b> en cours depuis {Minutes(d.Now - cur.Start)}{(string.IsNullOrWhiteSpace(cur.Idea) ? "" : $" : {E(Clip(cur.Idea, 140))}")}</p>"
             : "<p><span class=\"dot\"></span>Aucun essai en cours</p>");
-        html.Append($"<p>Dernières 24 h : <b>{recent.Count}</b> essais, <b>{recent.Count(t => t.Verdict == "GARDE")}</b> gardé(s), {recent.Count(t => t.Verdict == "ECHEC_AGENT")} échec(s) d'agent</p>");
+        var refused = recent.Count(t => t.Verdict == "NOTE_REFUSEE");
+        html.Append($"<p>Dernières 24 h : <b>{recent.Count}</b> essais, <b>{recent.Count(t => t.Verdict == "GARDE")}</b> gardé(s), {recent.Count(t => t.Verdict == "ECHEC_AGENT")} échec(s) d'agent");
+        html.Append(refused > 0 ? $", <span class='down'>{refused} note(s) du penseur refusée(s)</span></p>" : "</p>");
         html.Append("<p class=\"muted\">Depuis le début : ");
         html.Append(string.Join(" · ", d.Trials.GroupBy(t => t.Verdict ?? "?").OrderByDescending(g => g.Count()).Select(g => $"{E(g.Key)} {g.Count()}")));
         html.Append("</p>");
@@ -307,7 +309,7 @@ public static class StatusPage
     {
         "GARDE" => "kept",
         "JETE" => "rejected",
-        "ECHEC_AGENT" or "ERREUR" or "FAUTE" or "NON_COMPILE" => "failed",
+        "ECHEC_AGENT" or "ERREUR" or "FAUTE" or "NON_COMPILE" or "NOTE_REFUSEE" => "failed",
         _ => "other",
     };
 

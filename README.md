@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-19
+> **Status**: in production · **Last updated**: 2026-11-20
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -70,7 +70,8 @@ flowchart LR
 
 1. **Thinker** (Antigravity, Gemini Flash High): reads the official rules, the engine notes, a
    strategy sheet, the champion's source and the history of past trials, and writes one idea in
-   a short note.
+   a short note. A note without an idea or a known target, or over the word limit, is asked
+   again once with what is wrong; a second refusal ends the trial (`NOTE_REFUSEE`).
 2. **Coder** (Antigravity, Gemini Flash Medium): applies the note to the C++ bot, in one pass.
 3. **Build**: `g++ -std=c++20`; compile errors go back to the coder up to twice.
 4. **Lab**: the farm plays 40 quick games of the candidate against the champion. A fault or a
@@ -178,7 +179,7 @@ rebuilding. Unknown keys are rejected with the faulty field named. Main sections
 | `api` | Confirmation (games per opponent, number of real players, rank span), automatic submission, ranking record interval, rollback threshold |
 | `laboratoire` | Coder's lab: quick games, revision threshold, maximum revisions |
 | `analyse` | Loss analysis: collision threshold, cause thresholds, ranked games read per hour |
-| `boucle` | Trials per day, rejections before a fresh look, retries, pauses |
+| `boucle` | Trials per day, rejections before a fresh look, retries, pauses, the thinker's word limit |
 | `contexte` | How much history the agents see |
 | `banc` | Optional local bench of outside bots (empty by default: it no longer separated our versions) |
 
