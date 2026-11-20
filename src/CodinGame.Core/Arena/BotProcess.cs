@@ -41,25 +41,10 @@ public sealed class BotProcess : IBotConnection, IAsyncDisposable
             info.FileName = executable;
         }
         var process = Process.Start(info) ?? throw new InvalidOperationException($"Impossible de lancer {executable}.");
-        var bot = new BotProcess(process);
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null && bot._errors.Count < MaxErrorLines)
-            {
-                bot._errors.Enqueue(e.Data);
-            }
-        };
+        process.ErrorDataReceived += (_, _) => { };
         process.BeginErrorReadLine();
-        return bot;
+        return new BotProcess(process);
     }
-
-    /// <summary>Only the first standard error lines are kept: enough to check the trace line.</summary>
-    private const int MaxErrorLines = 50;
-
-    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _errors = new();
-
-    /// <summary>The first lines the bot wrote to standard error.</summary>
-    public IReadOnlyList<string> ErrorLines() => _errors.ToArray();
 
     public async Task SendAsync(IReadOnlyList<string> lines, CancellationToken ct)
     {

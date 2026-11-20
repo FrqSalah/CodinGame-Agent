@@ -48,8 +48,8 @@ public static class LossReport
         var sb = new StringBuilder("# Why the champion loses against real players\n\n");
         if (games.Count == 0)
         {
-            return sb.Append("No real CodinGame game of the current champion has been analysed yet: the champion does not ")
-                .Append("write the trace line yet. The next kept candidate will bring it.\n").ToString();
+            return sb.Append("No real CodinGame game of the current champion has been analysed yet: the farm replays its ")
+                .Append("ranked games at every ranking reading.\n").ToString();
         }
 
         var b = Breakdown(games);

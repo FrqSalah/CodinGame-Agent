@@ -181,8 +181,8 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
 
     /// <summary>
     /// Reads the latest ranked games of the submitted champion not read yet (at most
-    /// <c>analyse.parties_classees_par_releve</c>) and measures those that carry its trace line.
-    /// Games without a trace are journaled too, so that they are never read again.
+    /// <c>analyse.parties_classees_par_releve</c>) and measures them by replaying them on the local
+    /// engine. A game that cannot be replayed is journaled too, so that it is never read again.
     /// </summary>
     private async Task AnalyseBattlesAsync(string name, PipelineConfig cfg, Journal journal, CancellationToken ct)
     {
@@ -196,17 +196,19 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
             .Where(id => !seen.Contains(id.ToString(CultureInfo.InvariantCulture)))
             .Take(cfg.Analyse.PartiesClasseesParReleve)
             .ToList();
-        var traced = 0;
+        var measured = 0;
+        var engine = new RefereeGame(cfg.Arene.Arbitre);
         foreach (var id in fresh)
         {
-            var analysis = Analysis.RaceAnalysis.OfGame("battle", await api.GetGameAsync(id, ct), champion, null, null, cfg.Analyse);
+            var analysis = await Analysis.RaceAnalysis.OfGameAsync(
+                "battle", await api.GetGameAsync(id, ct), champion, null, null, cfg.Analyse, engine, cfg.Arene.Limits(), ct);
             journal.AddAnalysis(analysis);
-            traced += analysis.Measures is null ? 0 : 1;
+            measured += analysis.Measures is null ? 0 : 1;
         }
 
         if (fresh.Count > 0)
         {
-            log.LogInformation("Pipeline {Pipeline} : {N} parties classées lues, {T} avec la ligne de trace", name, fresh.Count, traced);
+            log.LogInformation("Pipeline {Pipeline} : {N} parties classées lues, {M} rejouées et mesurées", name, fresh.Count, measured);
         }
     }
 

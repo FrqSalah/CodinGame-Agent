@@ -26,9 +26,7 @@ public sealed class Bench(RefereeGame game, ArenaSettings arena, ILogger log)
         Action<BenchCase, MatchResult> record,
         CancellationToken ct)
     {
-        var limits = new TurnLimits(
-            TimeSpan.FromMilliseconds(arena.PremierTourMs * arena.ToleranceTemps),
-            TimeSpan.FromMilliseconds(arena.TourMs * arena.ToleranceTemps));
+        var limits = arena.Limits();
         using var slots = new SemaphoreSlim(arena.Parallele);
         var todo = cases.Where(c => !known.ContainsKey(c)).ToList();
         log.LogInformation("Banc : {N} partie(s) à jouer ({Deja} déjà connues)", todo.Count, cases.Count - todo.Count);

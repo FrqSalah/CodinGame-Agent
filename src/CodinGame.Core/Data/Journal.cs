@@ -10,7 +10,7 @@ public sealed record TrialSummary(
 
 /// <summary>
 /// One analysed game (<see cref="Analysis.RaceAnalysis"/>). <paramref name="Source"/>: local, test
-/// or battle. <paramref name="Measures"/> is null when the game had no trace line to read.
+/// or battle. <paramref name="Measures"/> is null when the game could not be replayed.
 /// </summary>
 public sealed record GameAnalysis(
     string Source, string Ref, long? TrialId, string BotHash, string? Opponent,
@@ -328,11 +328,16 @@ public sealed class Journal : IDisposable
             ("$p1", m?.Us.Progress ?? 0), ("$p2", m?.Them.Progress ?? 0), ("$cause", a.Cause), ("$d", Now()));
     }
 
-    /// <summary>References of the games of a source already read, with or without a trace (never read twice).</summary>
+    /// <summary>References of the games of a source already read, measured or not (never read twice).</summary>
     public HashSet<string> AnalysedRefs(string source) =>
         Query("SELECT ref FROM analyses WHERE source = $s", r => r.GetString(0), ("$s", source)).ToHashSet();
 
-    /// <summary>Analysed games of a bot (with a trace), from the given sources.</summary>
+    /// <summary>Real CodinGame games (ranked and confirmation) measured since <paramref name="since"/>.</summary>
+    public int RealGamesMeasuredSince(DateTime since) => Convert.ToInt32(Scalar(
+        "SELECT COUNT(*) FROM analyses WHERE source IN ('battle', 'test') AND tours > 0 AND analyse_le >= $d",
+        ("$d", since.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture))), CultureInfo.InvariantCulture);
+
+    /// <summary>Measured games of a bot, from the given sources.</summary>
     public IReadOnlyList<GameAnalysis> Analyses(string botHash, params string[] sources) =>
         Query($"""
             SELECT {AnalysisColumns} FROM analyses

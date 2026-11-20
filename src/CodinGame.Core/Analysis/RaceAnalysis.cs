@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using CodinGame.Core.Arena;
 using CodinGame.Core.CodinGameApi;
 using CodinGame.Core.Config;
@@ -72,12 +71,12 @@ public static class LossCauses
 /// command, the next state of a pod that hits nothing is fixed (rotation, thrust, rounding,
 /// friction, see ENGINE.md); a pod far from that prediction was hit. The rest are counts.
 /// </summary>
-public static partial class RaceAnalysis
+public static class RaceAnalysis
 {
     /// <summary>
     /// Distance between a pod's next state and the no-collision prediction (position or speed).
-    /// <paramref name="first"/>: the first turn, where a pod turns freely. Not told by the angle:
-    /// CodinGame gives -1 then 0 to 359, the local engine gives negative angles all game long.
+    /// <paramref name="first"/>: the first turn, where a pod turns freely (told by the turn number:
+    /// a pod facing angle -1 is not proof of a first turn).
     /// </summary>
     public static int Deviation(PodState p, PodCommand c, PodState next, bool first = false)
     {
@@ -196,124 +195,6 @@ public static partial class RaceAnalysis
         return m.Gap <= s.ArriveeSerree ? LossCauses.Finish : LossCauses.Other;
     }
 
-    // ---- The trace line ----
-
-    /// <summary>
-    /// The line the bot writes to standard error every turn: <c>T</c> then the 24 integers it read
-    /// (x y vx vy angle nextCheckPointId of the 4 pods, in input order). CodinGame keeps our
-    /// standard error in its game logs: this line is how the farm sees real games.
-    /// </summary>
-    public static bool TryParseTrace(string line, out PodState[] pods)
-    {
-        pods = [];
-        var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length != 25 || words[0] != "T")
-        {
-            return false;
-        }
-
-        var v = new int[24];
-        for (var i = 0; i < 24; i++)
-        {
-            if (!int.TryParse(words[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out v[i]))
-            {
-                return false;
-            }
-        }
-
-        pods = Enumerable.Range(0, 4).Select(k => new PodState(v[k * 6], v[k * 6 + 1], v[k * 6 + 2], v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 5])).ToArray();
-        return true;
-    }
-
-    /// <summary>A first turn to send a bot, and the trace line it must write in answer.</summary>
-    public static readonly string[] ProbeInput =
-    [
-        "3", "4", "3000 3000", "11000 2500", "12000 7000", "4000 7000",
-        "3000 2500 0 0 -1 1", "3000 3500 0 0 -1 1", "3000 1500 0 0 -1 1", "3000 4500 0 0 -1 1",
-    ];
-
-    public const string ProbeTrace = "T 3000 2500 0 0 -1 1 3000 3500 0 0 -1 1 3000 1500 0 0 -1 1 3000 4500 0 0 -1 1";
-
-    /// <summary>Does this bot write the trace line? Plays its first turn on <see cref="ProbeInput"/>.</summary>
-    public static async Task<bool> PrintsTraceAsync(string executable, CancellationToken ct)
-    {
-        await using var bot = BotProcess.Start(executable);
-        await bot.SendAsync(ProbeInput, ct);
-        for (var i = 0; i < 2; i++)
-        {
-            if (await bot.ReadLineAsync(TimeSpan.FromSeconds(3), ct) is null)
-            {
-                return false;
-            }
-        }
-
-        for (var wait = 0; wait < 20; wait++)
-        {
-            if (bot.ErrorLines().Any(l => string.Join(' ', l.Split(' ', StringSplitOptions.RemoveEmptyEntries)) == ProbeTrace))
-            {
-                return true;
-            }
-
-            await Task.Delay(50, ct);
-        }
-
-        return false;
-    }
-
-    // ---- Turns of a CodinGame game ----
-
-    [GeneratedRegex(@"^Pod (\d) of player \$(\d) (.*)$")]
-    private static partial Regex RefereeLine();
-
-    [GeneratedRegex(@"\((-?\d+), (-?\d+)\)(?: at power (\d+))?")]
-    private static partial Regex TargetAndPower();
-
-    /// <summary>
-    /// Turns of a CodinGame game seen from our agent: pods from our trace lines, commands of the
-    /// four pods from the referee's lines. Null when the game has no complete trace.
-    /// </summary>
-    public static IReadOnlyList<RaceTurn>? FromGameLog(GameLog log)
-    {
-        var states = new List<PodState[]>();
-        foreach (var line in log.StderrOf(log.Me).Where(l => l.StartsWith('T')))
-        {
-            if (!TryParseTrace(line, out var pods))
-            {
-                return null;
-            }
-
-            states.Add(pods);
-        }
-
-        var commands = new List<PodCommand[]>();
-        var current = new PodCommand?[4];
-        foreach (var line in log.Frames.Where(f => f.Referee is not null).SelectMany(f => f.Referee!.Split('\n')))
-        {
-            var m = RefereeLine().Match(line.Trim());
-            if (!m.Success)
-            {
-                continue;
-            }
-
-            var player = m.Groups[2].Value[0] - '0';
-            var k = (player == log.Me ? 0 : 2) + (m.Groups[1].Value[0] - '1');
-            var what = m.Groups[3].Value;
-            var target = TargetAndPower().Match(what);
-            current[k] = !target.Success
-                ? new PodCommand(null, null, 0, what.Contains("shield", StringComparison.Ordinal))
-                : new PodCommand(Int(target.Groups[1].Value), Int(target.Groups[2].Value),
-                    what.StartsWith("boosts", StringComparison.Ordinal) ? 650 : target.Groups[3].Success ? Int(target.Groups[3].Value) : 0);
-            if (current.All(c => c is not null))
-            {
-                commands.Add(current.Select(c => c!.Value).ToArray());
-                current = new PodCommand?[4];
-            }
-        }
-
-        var n = Math.Min(states.Count, commands.Count);
-        return n < 2 ? null : Enumerable.Range(0, n).Select(t => new RaceTurn(states[t], commands[t])).ToList();
-    }
-
     // ---- Turns of a local game ----
 
     /// <summary>
@@ -341,8 +222,9 @@ public static partial class RaceAnalysis
                 break;
             }
 
+            // The engine sends angles from -180 to 180, CodinGame from 0 to 359 (and -1 before the first move).
             var pods = input.Select(l => l.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(Int).ToArray())
-                .Select(v => new PodState(v[0], v[1], v[2], v[3], v[4], v[5])).ToArray();
+                .Select(v => new PodState(v[0], v[1], v[2], v[3], t == 0 ? v[4] : (v[4] % 360 + 360) % 360, v[5])).ToArray();
             var answers = mine[t].Output.Concat(theirs[t].Output).ToList();
             var commands = new PodCommand[4];
             for (var k = 0; k < 4; k++)
@@ -384,14 +266,75 @@ public static partial class RaceAnalysis
 
     private static int Int(string s) => int.Parse(s, NumberStyles.Integer, CultureInfo.InvariantCulture);
 
+    // ---- Turns of a CodinGame game, replayed ----
+
+    /// <summary>The checkpoints of a CodinGame game, from its options (« map=x y x y … »), or null.</summary>
+    public static IReadOnlyList<(int X, int Y)>? MapOf(string options)
+    {
+        var line = options.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith("map=", StringComparison.Ordinal));
+        var v = line?[4..].Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => int.TryParse(w, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null).ToList();
+        return v is null || v.Count < 4 || v.Count % 2 != 0 || v.Any(n => n is null)
+            ? null
+            : Enumerable.Range(0, v.Count / 2).Select(i => (v[2 * i]!.Value, v[2 * i + 1]!.Value)).ToList();
+    }
+
+    /// <summary>
+    /// Turns of a CodinGame game seen from our agent, replayed on the local engine: its map, and the
+    /// commands both players wrote. The physics is the same, so the engine gives back every pod's
+    /// position: no trace is needed, for any bot. Null without a map or turns.
+    /// </summary>
+    public static async Task<IReadOnlyList<RaceTurn>?> ReplayAsync(RefereeGame engine, GameLog log, TurnLimits limits, CancellationToken ct)
+    {
+        if (MapOf(log.Options) is not { } map)
+        {
+            return null;
+        }
+
+        IBotConnection[] bots = [new ReplayBot(log.StdoutOf(0)), new ReplayBot(log.StdoutOf(1))];
+        var r = await engine.PlayAsync(bots, 0, limits, ct, relay: true, map: map);
+        if (r.Relay is null || FromRelay(r.Relay) is not { } turns)
+        {
+            return null;
+        }
+
+        return log.Me == 0 ? turns : turns.Select(t => new RaceTurn(
+            [t.Pods[2], t.Pods[3], t.Pods[0], t.Pods[1]], [t.Commands[2], t.Commands[3], t.Commands[0], t.Commands[1]])).ToList();
+    }
+
+    /// <summary>A player that writes again, in order, the lines a real bot wrote.</summary>
+    private sealed class ReplayBot(IEnumerable<string> lines) : IBotConnection
+    {
+        private readonly Queue<string> _lines = new(lines.Select(l => l.Trim()).Where(l => l.Length > 0));
+
+        public Task SendAsync(IReadOnlyList<string> lines, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<string?> ReadLineAsync(TimeSpan timeout, CancellationToken ct) =>
+            Task.FromResult(_lines.TryDequeue(out var l) ? l : null);
+    }
+
     // ---- Analysed games, ready for the journal ----
 
-    /// <summary>A CodinGame game of ours (<paramref name="source"/>: test or battle). Without a trace, nothing is measured.</summary>
-    public static Data.GameAnalysis OfGame(string source, GameLog log, string botHash, string? opponent, long? trialId, AnalysisSettings s)
+    /// <summary>
+    /// A CodinGame game of ours (<paramref name="source"/>: test or battle), measured by replaying it
+    /// on <paramref name="engine"/>. A game that cannot be replayed is kept without measures.
+    /// </summary>
+    public static async Task<Data.GameAnalysis> OfGameAsync(
+        string source, GameLog log, string botHash, string? opponent, long? trialId, AnalysisSettings s, RefereeGame engine, TurnLimits limits, CancellationToken ct)
     {
         var outcome = log.OutcomeFor(log.Me).ToString();
         var fault = source == "test" ? log.TestedCodeFaulted : log.MeFaulted;
-        var measures = FromGameLog(log) is { } turns ? Measure(turns, s.SeuilChoc) : null;
+        IReadOnlyList<RaceTurn>? turns;
+        try
+        {
+            turns = await ReplayAsync(engine, log, limits, ct);
+        }
+        catch (Exception e) when (e is FormatException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            turns = null;   // an output the engine or the reading does not accept: the game stays unmeasured
+        }
+
+        var measures = turns is null ? null : Measure(turns, s.SeuilChoc);
         var cause = measures is not null && outcome == nameof(Outcome.Loss) ? Cause(measures, fault, s) : null;
         return new Data.GameAnalysis(source, log.GameId.ToString(CultureInfo.InvariantCulture), trialId, botHash, opponent, outcome, fault, measures, cause);
     }

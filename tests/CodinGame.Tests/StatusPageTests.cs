@@ -83,11 +83,14 @@ public class StatusPageTests
         var data = Data([new RankingEntry(Now, 103, 236_714, 40.67, "Legend", 103, 2297, 100)]);
 
         var html = StatusPage.Render(data with { Losses = new(40, 28, 12, [("blocking", 9), ("speed", 3)]) });
-        var none = StatusPage.Render(data with { Losses = new(0, 0, 0, []) });
+        var none = StatusPage.Render(data with { Losses = new(0, 0, 0, []), RealGames24h = 0 });
+        var recent = StatusPage.Render(data with { Losses = new(40, 28, 12, []), RealGames24h = 31 });
 
         Assert.Contains("Pourquoi on perd", html);
         Assert.Contains("Bataille de blocage perdue</td><td class='num'>9 · 75 %", html);
-        Assert.Contains("n'écrit pas encore sa ligne de trace", none);
+        Assert.Contains("la ferme rejoue ses parties classées", none);
+        Assert.Contains("<span class='down'>Aucune vraie partie mesurée depuis 24 h.</span>", none);
+        Assert.Contains("31 vraies parties rejouées et mesurées ces dernières 24 h", recent);
     }
 
     [Fact]

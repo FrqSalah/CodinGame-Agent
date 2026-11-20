@@ -76,7 +76,7 @@ thanks to `pipelines/mad-pod-racing/silver/Bot.cpp`, reached Legend the same day
 | Judge | `Core/Judging/Sprt.cs` | Wald's sequential test (H0: 0 Elo, H1: `elo1`) |
 | Confirmation | `Core/Pipeline/Confirmation.cs` | Fixed rule picking real opponents above us; game-by-game comparison with the champion |
 | Ranking loop | `Core/Pipeline/RankingCheck.cs` | Fixed rule withdrawing a champion that scores clearly lower than the previous one |
-| Loss analysis | `Core/Analysis/RaceAnalysis.cs`, `LossReport.cs` | Turns of a game from the trace line or the engine relay; collisions, pace, cause of a loss; LOSSES.md |
+| Loss analysis | `Core/Analysis/RaceAnalysis.cs`, `LossReport.cs` | Turns of a real game replayed on the engine, or of a local game from the relay; collisions, pace, cause of a loss; LOSSES.md |
 | Agents | `Core/Agents/AgentRunner.cs`, `FallbackAgentRunner.cs` | `agy -p`; JSON status read (the exit code proves nothing); duration bounded by us; separate `agent` user; model chain with fallback |
 | Trial | `Core/Pipeline/Trial.cs` | Chains the steps of §1 |
 | Farm | `Core/Pipeline/Farm.cs` | Continuous loop, automatic pauses (login, quota, league, configuration), hourly ranking and rollback |
@@ -122,11 +122,18 @@ the same comparison; 0 disables the rule.
 
 ## 8. Loss analysis (2026-11-19)
 
-Every bot writes, every turn, one line to standard error: `T` then the 24 integers it read
-(x y vx vy angle nextCheckPointId of the 4 pods). CodinGame keeps our standard error in test games
-and in ranked games (checked on 2026-11-19: 297 complete lines out of 297 turns, at most 107
-characters; it sometimes merges two turns in one frame). With the referee's lines, which give
-every pod's command, the farm has the whole game. Locally, the engine relay gives the same.
+A CodinGame game log (`format=json`) holds the map (`map=` in the game options) and every line
+both players wrote (`stdout`), not the pods. The farm replays it on the local engine, started on
+that map (robostac's `###Validate`, 3 laps as on CodinGame), with two players that write the
+recorded lines again: the engine relay then gives the 4 pods of every turn, for any bot. Locally,
+the engine relay of the game gives the same. The engine sends angles from -180 to 180; they are
+read as CodinGame's 0 to 359.
+
+Checked on 2026-11-20: a real test game whose bot wrote its pods to standard error, replayed:
+1,187 pod states out of 1,188 identical (the last one: angle 360 against 0), same measures. On
+the 20 latest ranked games, 19 replayed to their last turn with a final gap consistent with the
+result; one stopped 2 turns early (our pods 100 turns without a checkpoint: the engine counts that
+limit slightly differently).
 
 - Collision: a pod whose next state is more than `analyse.seuil_choc` (25) away from its
   no-collision prediction (rotation at most 18°, thrust, rounding, `× 0.85` truncated). Checked on
@@ -141,10 +148,11 @@ every pod's command, the farm has the whole game. Locally, the engine relay give
   `parties_classees_par_releve` (30) new ranked games of the champion per hourly ranking.
 - The thinker and the fresh look get LOSSES.md (real games of the champion only). The thinker
   writes `TARGET:` (stored as `essais.cause_visee`); each trial stores its duel's measures,
-  candidate against champion (`essais.mesures`), shown in HISTORY.md and in LAB.md. The lab sends
-  a version without the trace line back to the coder. The status page shows the causes.
-- The champion is not modified to add the line (a resubmission would reset its ranking): the
-  coder adds it to the next candidates, and the first kept one brings it to the leaderboard.
+  candidate against champion (`essais.mesures`), shown in HISTORY.md and in LAB.md. The status
+  page shows the causes and the real games measured in the last 24 hours (zero shows in red).
+- Until 2026-11-20 the bot wrote its pods to standard error (a « trace line »), read in the game
+  logs; the current champion had none, so its real games stayed unmeasured. The replay made the
+  line useless: it was removed from the coder's rules, the lab and the starting bot.
 
 ## 9. Deployment
 
@@ -209,7 +217,9 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   target, at most `boucle.mots_note_max` words (also the limit the prompt states). A failing
   note is asked again once with its problems; a second failure ends the trial as
   `NOTE_REFUSEE` (no pause, not listed among the ideas tried), counted on the status page. On
-  the 17 notes since the target line, only one (454 words) would have been asked again.
+  the 17 notes since the target line, only one (454 words) would have been asked again. Real
+  games are replayed on the local engine for the loss analysis (section 8): every ranked game of
+  any champion is measured, the trace line is gone.
 
 ## 12. Still unverified
 

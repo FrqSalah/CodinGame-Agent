@@ -114,39 +114,19 @@ public class RaceAnalysisTests
         Assert.Equal(cause, RaceAnalysis.Cause(m, fault, Settings));
     }
 
-    [Fact]
-    public void Reads_the_trace_line()
+    [Theory]
+    [InlineData("seed=1\npod_timeout=100\nmap=4563 2191 7371 4945 3321 7240\npod_per_player=2", 3)]
+    [InlineData("seed=1\nmap=4563 2191 7371", 0)]
+    [InlineData("seed=1", 0)]
+    public void Reads_the_map_of_a_CodinGame_game(string options, int checkpoints)
     {
-        Assert.True(RaceAnalysis.TryParseTrace(RaceAnalysis.ProbeTrace, out var pods));
-        Assert.Equal(new PodState(3000, 4500, 0, 0, -1, 1), pods[3]);
-        Assert.False(RaceAnalysis.TryParseTrace("T 1 2 3", out _));
-        Assert.False(RaceAnalysis.TryParseTrace("sims 12000", out _));
-    }
+        var map = RaceAnalysis.MapOf(options);
 
-    private static GameFrame Frame(int n, int agent, string referee, string? stderr = null) => new(n, agent, null, stderr, referee, null, null);
-
-    private static string Trace(int x) => $"T {x} 1000 0 0 0 1 {x} 2000 0 0 0 1 {x} 3000 0 0 0 1 {x} 4000 0 0 0 1";
-
-    [Fact]
-    public void Reads_a_CodinGame_game_from_our_seat()
-    {
-        // We are agent 1 (a ranked game); CodinGame merged the standard error of two turns in frame 4.
-        var log = new GameLog(1, "", [
-            Frame(1, 0, "Pod 1 of player $0 moves towards (100, 200) at power 50\nPod 2 of player $0 boosts towards (300, 400)"),
-            Frame(2, 1, "Pod 1 of player $1 enabled its shield\nPod 2 of player $1 moves towards (5, 6) at power 200", Trace(1)),
-            Frame(3, 0, "Pod 1 of player $0 waits for its engine to reload\nPod 2 of player $0 moves towards (7, 8) at power 0"),
-            Frame(4, 1, "Pod 1 of player $1 moves towards (9, 9) at power 100\nPod 2 of player $1 moves towards (9, 9) at power 100", Trace(2) + "\n" + Trace(3)),
-        ], [1, 0], [1, 2], null, Me: 1);
-
-        var turns = RaceAnalysis.FromGameLog(log)!;
-
-        Assert.Equal(2, turns.Count);   // three trace lines, commands for two turns
-        Assert.Equal(new PodCommand(null, null, 0, Shield: true), turns[0].Commands[0]);   // our pod 1: shield
-        Assert.Equal(new PodCommand(5, 6, 200), turns[0].Commands[1]);
-        Assert.Equal(new PodCommand(100, 200, 50), turns[0].Commands[2]);
-        Assert.Equal(new PodCommand(300, 400, 650), turns[0].Commands[3]);   // their boost
-        Assert.Equal(2, turns[1].Pods[0].X);
-        Assert.Null(RaceAnalysis.FromGameLog(log with { Frames = log.Frames.Select(f => f with { Stderr = null }).ToList() }));
+        Assert.Equal(checkpoints, map?.Count ?? 0);
+        if (checkpoints > 0)
+        {
+            Assert.Equal((7371, 4945), map![1]);
+        }
     }
 
     [Fact]
@@ -192,7 +172,7 @@ public class RaceAnalysisTests
         Assert.Contains("4 real CodinGame games", text);
         Assert.Contains("| blocking: our runner was hit clearly more often than theirs | 2 | 67 % |", text);
         Assert.Contains("our runner hit 9 times, theirs 2", text);
-        Assert.Contains("the champion does not write the trace line yet", LossReport.ForAgents([], Settings));
+        Assert.Contains("the farm replays its ranked games", LossReport.ForAgents([], Settings));
         Assert.Equal("runner 8.5 vs 8.0 turns per checkpoint, runner hit 8.0 vs 2.0 times, own pods collided 1.0 vs 0.0 times (2 games)",
             LossReport.Comparison(games.Skip(1).Take(2).Select(g => g.Measures!).ToList()));
     }

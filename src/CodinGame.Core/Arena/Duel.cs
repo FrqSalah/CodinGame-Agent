@@ -27,9 +27,7 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         bool relay = false)
     {
         var sprt = new Sprt(settings.Elo0, settings.Elo1, settings.Alpha, settings.Beta);
-        var limits = new TurnLimits(
-            TimeSpan.FromMilliseconds(settings.PremierTourMs * settings.ToleranceTemps),
-            TimeSpan.FromMilliseconds(settings.TourMs * settings.ToleranceTemps));
+        var limits = settings.Limits();
 
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var slots = new SemaphoreSlim(settings.Parallele);

@@ -193,17 +193,16 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
         }
 
-        // 4. Lab: quick games against the champion. A fault, a clear deficit or a missing trace line
+        // 4. Lab: quick games against the champion. A fault or a clear deficit
         //    goes back to the coder, who can fix a bug before the expensive judge. The judge alone decides.
         var lab = cfg.Laboratoire;
         for (var round = 0; lab.Parties > 0; round++)
         {
             var (outcome, measures) = await LabAsync(build.Executable!, championSource, ct);
-            var traced = await RaceAnalysis.PrintsTraceAsync(build.Executable!, ct);
             var rate = outcome.Games == 0 ? 0 : (outcome.Wins + 0.5 * outcome.Draws) / outcome.Games;
-            log.LogInformation("Essai {Essai} : laboratoire {Tour} — {V} V / {D} D{Faute}{Trace}", id, round + 1, outcome.Wins, outcome.Losses,
-                outcome.CandidateFault is null ? "" : $", faute : {outcome.CandidateFault}", traced ? "" : ", ligne de trace absente");
-            if (round >= lab.RevisionsMax || (outcome.CandidateFault is null && rate >= lab.SeuilRevision && traced))
+            log.LogInformation("Essai {Essai} : laboratoire {Tour} — {V} V / {D} D{Faute}", id, round + 1, outcome.Wins, outcome.Losses,
+                outcome.CandidateFault is null ? "" : $", faute : {outcome.CandidateFault}");
+            if (round >= lab.RevisionsMax || (outcome.CandidateFault is null && rate >= lab.SeuilRevision))
             {
                 break;
             }
@@ -212,7 +211,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                 ("NOTE.md", note),
                 ("ENGINE.md", engine),
                 (botFile, candidate),
-                ("LAB.md", LabReport(outcome, rate, LossReport.Comparison(measures), traced)));
+                ("LAB.md", LabReport(outcome, rate, LossReport.Comparison(measures))));
             var revision = await agents.RunAsync(new AgentRequest("codeur", cfg.Agents.Codeur, codeDir, revisePrompt, TimeSpan.FromMinutes(cfg.Agents.BlocageMinutes)), ct);
             journal.AddTrialTokens(id, "codeur", revision.Tokens);
             var revised = ReadOrEmpty(Path.Combine(codeDir, botFile));
@@ -268,7 +267,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     }
 
     /// <summary>What the coder learns from the lab, in the language of its prompt.</summary>
-    public static string LabReport(DuelOutcome o, double rate, string? comparison = null, bool traced = true)
+    public static string LabReport(DuelOutcome o, double rate, string? comparison = null)
     {
         var sb = new StringBuilder("# Lab results of your previous version\n\n");
         sb.Append(CultureInfo.InvariantCulture,
@@ -281,13 +280,6 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         if (o.CandidateFault is not null)
         {
             sb.Append("Your version FAILED a game (crash, timeout or invalid output): ").Append(o.CandidateFault).Append("\n\n");
-        }
-
-        if (!traced)
-        {
-            sb.Append("Your version does NOT write the trace line of rule 6 to standard error. Add it exactly as the rule says: ")
-              .Append("on its first turn, given the four pods `").Append(string.Join(" / ", RaceAnalysis.ProbeInput[^4..]))
-              .Append("`, the bot must write the line `").Append(RaceAnalysis.ProbeTrace).Append("`.\n\n");
         }
 
         sb.Append("A version that loses clearly more than it wins against the champion usually hides a bug ")
@@ -558,7 +550,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             var entry = new ApiGameEntry(result.Log.GameId, hash, opponent, result.Log.Options,
                 result.Log.OutcomeFor(0).ToString(), result.Log.TestedCodeFaulted);
             ctx.Journal.AddApiGame(entry.GameId, hash, opponent, entry.Options, entry.Outcome, entry.Fault, trialId);
-            ctx.Journal.AddAnalysis(RaceAnalysis.OfGame("test", result.Log, hash, opponent, trialId, ctx.Config.Analyse));
+            ctx.Journal.AddAnalysis(await RaceAnalysis.OfGameAsync("test", result.Log, hash, opponent, trialId, ctx.Config.Analyse, ctx.Referee, ctx.Config.Arene.Limits(), ct));
             games.Add(entry);
         }
 
@@ -707,7 +699,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return sb.ToString();
     }
 
-    /// <summary>LOSSES.md: why the champion loses its real games (ranked and confirmation games with a trace).</summary>
+    /// <summary>LOSSES.md: why the champion loses its real games (ranked and confirmation games, replayed).</summary>
     private string Losses(string championHash) =>
         LossReport.ForAgents(ctx.Journal.Analyses(championHash, "battle", "test"), ctx.Config.Analyse);
 

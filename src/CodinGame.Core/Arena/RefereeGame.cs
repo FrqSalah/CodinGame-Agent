@@ -43,7 +43,9 @@ public sealed record RelayExchange(int Player, IReadOnlyList<string> Input, IRea
 public sealed class RefereeGame(string refereeCommand)
 {
     /// <param name="relay">Keep every turn in <see cref="MatchResult.Relay"/>, for the loss analysis.</param>
-    public async Task<MatchResult> PlayAsync(IReadOnlyList<IBotConnection> bots, long seed, TurnLimits limits, CancellationToken ct, bool relay = false)
+    /// <param name="map">Play this map (checkpoints in order) instead of one drawn from <paramref name="seed"/>: the engine's « ###Validate » start, used to replay a real game.</param>
+    public async Task<MatchResult> PlayAsync(
+        IReadOnlyList<IBotConnection> bots, long seed, TurnLimits limits, CancellationToken ct, bool relay = false, IReadOnlyList<(int X, int Y)>? map = null)
     {
         var parts = refereeCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var info = new ProcessStartInfo(parts[0])
@@ -74,8 +76,15 @@ public sealed class RefereeGame(string refereeCommand)
         referee.BeginErrorReadLine();
         try
         {
-            await referee.StandardInput.WriteLineAsync($"###Seed {seed.ToString(CultureInfo.InvariantCulture)}".AsMemory(), ct);
-            await referee.StandardInput.WriteLineAsync("###Start 2".AsMemory(), ct);
+            var start = map is null
+                ? [$"###Seed {seed.ToString(CultureInfo.InvariantCulture)}", "###Start 2"]
+                : new[] { "###Validate", map.Count.ToString(CultureInfo.InvariantCulture) }
+                    .Concat(map.Select(c => string.Create(CultureInfo.InvariantCulture, $"{c.X} {c.Y}"))).ToArray();
+            foreach (var line in start)
+            {
+                await referee.StandardInput.WriteLineAsync(line.AsMemory(), ct);
+            }
+
             await referee.StandardInput.FlushAsync(ct);
             var exchanges = relay ? new List<RelayExchange>() : null;
             var result = await RelayAsync(referee, errors, bots, limits, exchanges, ct);

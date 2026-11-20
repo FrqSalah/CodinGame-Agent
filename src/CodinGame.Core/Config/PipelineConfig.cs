@@ -30,7 +30,12 @@ public sealed record ArenaSettings(
     double Alpha,
     double Beta,
     int PartiesProlongation,
-    double LlrProlongation);
+    double LlrProlongation)
+{
+    /// <summary>The time limits of a local game's turns, tolerance included.</summary>
+    public Arena.TurnLimits Limits() =>
+        new(TimeSpan.FromMilliseconds(PremierTourMs * ToleranceTemps), TimeSpan.FromMilliseconds(TourMs * ToleranceTemps));
+}
 
 /// <param name="PartiesConfirmation">Parties de confirmation par adversaire, pour le candidat comme pour le champion.</param>
 /// <param name="Adversaire">Adversaire de confirmation quand <paramref name="ConfirmationJoueurs"/> vaut 0.</param>

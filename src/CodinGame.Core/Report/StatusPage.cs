@@ -20,7 +20,8 @@ public sealed record StatusData(
     DateTime Now,
     TimeSpan RankingInterval,
     IReadOnlyList<ScoredChampion>? Scored = null,
-    Analysis.LossBreakdown? Losses = null);
+    Analysis.LossBreakdown? Losses = null,
+    int? RealGames24h = null);
 
 /// <summary>
 /// Page de suivi de la ferme, en HTML simple : classement dans le temps, champion, essais,
@@ -184,9 +185,17 @@ public static class StatusPage
         }
 
         html.Append("<section><h2>Pourquoi on perd</h2>");
+        if (d.RealGames24h is { } recent)
+        {
+            // Zero for a day means the analysis is blind: it must show.
+            html.Append(recent > 0
+                ? $"<p class='muted'>{recent} vraies parties rejouées et mesurées ces dernières 24 h.</p>"
+                : "<p><span class='down'>Aucune vraie partie mesurée depuis 24 h.</span></p>");
+        }
+
         if (b.Games == 0)
         {
-            html.Append("<p class='muted'>Aucune vraie partie analysée pour l'instant : le champion actuel n'écrit pas encore sa ligne de trace. Le prochain candidat gardé l'apportera.</p></section>");
+            html.Append("<p class='muted'>Aucune vraie partie du champion actuel analysée pour l'instant : la ferme rejoue ses parties classées à chaque relevé du classement.</p></section>");
             return;
         }
 

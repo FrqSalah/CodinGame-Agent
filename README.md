@@ -94,11 +94,10 @@ flowchart LR
 
 ### Loss analysis
 
-The thinker is told why the champion loses, not only how often. Every bot writes one trace line
-per turn to standard error (`T` and the 24 integers it read). CodinGame keeps our standard error
-in the logs of test games and ranked games, so the farm sees the position and speed of the 4 pods
-at every turn, plus every pod's command from the referee's lines; locally it sees the same through
-the engine relay.
+The thinker is told why the champion loses, not only how often. A CodinGame game log holds the
+map and every line both players wrote, but not the pods. The farm replays the game on the local
+engine, which has the same physics: the engine gives back the position and speed of the 4 pods at
+every turn, for any bot, without changing it. Locally the engine relay gives the same directly.
 
 - **Collisions** are found without simulating the race: the next state of a pod that hits nothing
   follows from its state and command (rotation, thrust, rounding, friction). A pod far from that
@@ -109,10 +108,9 @@ the engine relay.
   runner, narrow finish, other. Thresholds live in `pipeline.json` (`analyse`).
 - The thinker and the fresh look get `LOSSES.md` (causes, averages of won and lost games, the
   clearest example of each cause). The thinker names the cause it targets; the history shows, for
-  each trial, the duel's measures candidate against champion; the lab tells the coder the same,
-  and sends a version without the trace line back.
-- The farm reads up to 30 new ranked games of the champion every hour; the status page shows the
-  causes of its real losses.
+  each trial, the duel's measures candidate against champion; the lab tells the coder the same.
+- The farm replays up to 30 new ranked games of the champion every hour; the status page shows
+  the causes of its real losses and how many real games were measured in the last 24 hours.
 
 A trial ends early on an agent failure, a build failure, a fault (crash, timeout or invalid move)
 or a rejection. After 6 trials without a new champion, a **fresh look** agent (Claude Opus, then

@@ -99,12 +99,38 @@ public class RefereeGameTests
         Assert.True(collisions > 0);
     }
 
+    /// <summary>
+    /// A CodinGame game log holds the map and every command of both players, not the pods: the
+    /// analysis replays it on the engine. Here a local game is turned into such a log and replayed,
+    /// from either seat: the replay must give back every pod of every turn.
+    /// </summary>
     [Fact]
-    public async Task The_seed_bot_writes_the_trace_line()
+    public async Task A_game_log_replayed_on_the_engine_gives_back_every_pod()
     {
         var exe = await BuildSeedBotAsync();
+        var game = new RefereeGame(Referee!);
+        await using var a = BotProcess.Start(exe);
+        await using var b = BotProcess.Start(exe);
+        var result = await game.PlayAsync([a, b], seed: 3, Limits, TestContext.Current.CancellationToken, relay: true);
+        var played = CodinGame.Core.Analysis.RaceAnalysis.FromRelay(result.Relay!)!;
 
-        Assert.True(await CodinGame.Core.Analysis.RaceAnalysis.PrintsTraceAsync(exe, TestContext.Current.CancellationToken));
+        var setup = result.Relay![0].Input;
+        var cps = int.Parse(setup[1], System.Globalization.CultureInfo.InvariantCulture);
+        var options = "seed=3\npod_timeout=100\nmap=" + string.Join(' ', setup.Skip(2).Take(cps)) + "\npod_per_player=2";
+        var frames = result.Relay!.Select((e, i) => new CodinGame.Core.CodinGameApi.GameFrame(i + 1, e.Player, string.Join('\n', e.Output), null, null, null, null)).ToList();
+        var log = new CodinGame.Core.CodinGameApi.GameLog(1, options, frames, [0, 1], [1, 2], null);
+
+        var ours = await CodinGame.Core.Analysis.RaceAnalysis.ReplayAsync(game, log, Limits, TestContext.Current.CancellationToken);
+        var theirs = await CodinGame.Core.Analysis.RaceAnalysis.ReplayAsync(game, log with { Me = 1 }, Limits, TestContext.Current.CancellationToken);
+
+        Assert.True(played.Count > 50);
+        Assert.Equal(played.Count, ours!.Count);
+        for (var t = 0; t < played.Count; t++)
+        {
+            Assert.Equal(played[t].Pods, ours[t].Pods);
+            Assert.Equal(played[t].Commands, ours[t].Commands);
+            Assert.Equal([played[t].Pods[2], played[t].Pods[3], played[t].Pods[0], played[t].Pods[1]], theirs![t].Pods);
+        }
     }
 
     private static readonly TurnLimits Limits = new(TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(300));

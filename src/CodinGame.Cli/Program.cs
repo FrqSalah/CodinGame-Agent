@@ -154,7 +154,8 @@ string RenderStatus()
         DateTime.UtcNow,
         TimeSpan.FromMinutes(ConfigLoader.Load(p.ConfigSeed, p.ConfigData).Api.ReleveClassementMinutes),
         journal.ScoredChampions(),
-        CodinGame.Core.Analysis.LossReport.Breakdown(champion is null ? [] : journal.Analyses(champion, "battle", "test"))));
+        CodinGame.Core.Analysis.LossReport.Breakdown(champion is null ? [] : journal.Analyses(champion, "battle", "test")),
+        journal.RealGamesMeasuredSince(DateTime.UtcNow.AddHours(-24))));
 }
 
 async Task<int> RunTrial() => await farm.RunOnceAsync(PipelineArg(), ct) ? 0 : 2;
