@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-19
+> **Status**: in production on the VPS · **Last updated**: 2026-11-20
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -201,6 +201,9 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   (waiting up to 6 hours), no longer before every trial; `farm verifier` shows every window;
   the status page shows the best rank ever held (fully ranked readings only); loss analysis
   (section 8).
+- **2026-11-20**: the thinker's note starts at its last `IDEA:` label. Trial 189's thinker sent
+  its draft first (the prompt's format quoted, a word count) and the idea was read as « one
+  sentence. »; the draft is now dropped before the idea, the target and the coder's note.
 
 ## 12. Still unverified
 

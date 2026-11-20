@@ -115,7 +115,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.AgentFailure, $"penseur : {think.Error ?? "réponse vide"}"), null);
         }
 
-        var note = think.Response.Trim();
+        var note = AnswerOf(think.Response.Trim());
         var idea = IdeaOf(note);
         await File.WriteAllTextAsync(Path.Combine(dir, "note.md"), note, ct);
         journal.SetTrialNote(id, idea, note);
@@ -685,18 +685,45 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     private string Losses(string championHash) =>
         LossReport.ForAgents(ctx.Journal.Analyses(championHash, "battle", "test"), ctx.Config.Analyse);
 
-    /// <summary>The cause a note aims at: the first word after « TARGET: », if it names a known cause.</summary>
+    /// <summary>
+    /// The thinker's answer without its draft: a model sometimes sends its reasoning before the
+    /// answer, with earlier versions and the format of the prompt quoted. The answer starts at the
+    /// last « IDEA: » label (with its markdown); a response without the label is kept whole.
+    /// </summary>
+    public static string AnswerOf(string response)
+    {
+        var start = response.LastIndexOf("IDEA:", StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return response;
+        }
+
+        while (start > 0 && response[start - 1] is '*' or '#' or ' ' or '\t')
+        {
+            start--;
+        }
+
+        return response[start..].Trim();
+    }
+
+    /// <summary>The cause a note aims at: the first word after « TARGET: » (or on the next line), if it names a known cause.</summary>
     public static string? TargetOf(string note)
     {
-        foreach (var raw in note.Split('\n'))
+        var lines = note.Split('\n').Select(l => l.Trim().Trim('*', '`').Trim().TrimStart('#', '-', ' ')).ToList();
+        for (var i = 0; i < lines.Count; i++)
         {
-            var l = raw.Trim().Trim('*').Trim().TrimStart('#', '-', ' ');
-            if (!l.StartsWith("TARGET", StringComparison.OrdinalIgnoreCase))
+            if (!lines[i].StartsWith("TARGET", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var word = new string(l[6..].TrimStart(':', ' ', '*', '\t').TakeWhile(char.IsLetter).ToArray()).ToLowerInvariant();
+            var value = lines[i][6..].TrimStart(':', ' ', '*', '`', '\t');
+            if (value.Length == 0)
+            {
+                value = lines.Skip(i + 1).FirstOrDefault(x => x.Length > 0) ?? "";
+            }
+
+            var word = new string(value.TakeWhile(char.IsLetter).ToArray()).ToLowerInvariant();
             return LossCauses.All.Contains(word) ? word : null;
         }
 
