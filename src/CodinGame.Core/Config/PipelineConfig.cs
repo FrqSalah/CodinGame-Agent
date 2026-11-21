@@ -17,6 +17,9 @@ public sealed record AgentRoles(AgentRole Penseur, AgentRole Codeur, AgentRole R
 
 public sealed record BotSettings(string Fichier, string Compilation);
 
+/// <param name="PartiesProlongation">Second round: a duel that reaches <paramref name="PartiesMax"/> games without a verdict goes on up to this many games...</param>
+/// <param name="LlrProlongation">... when the second round's test already leans that way (its log-likelihood ratio at least this)...</param>
+/// <param name="Elo1Prolongation">... judged with this lower bar: small gains need more games to be proven.</param>
 public sealed record ArenaSettings(
     string Arbitre,
     int Parallele,
@@ -30,7 +33,8 @@ public sealed record ArenaSettings(
     double Alpha,
     double Beta,
     int PartiesProlongation,
-    double LlrProlongation)
+    double LlrProlongation,
+    double Elo1Prolongation)
 {
     /// <summary>The time limits of a local game's turns, tolerance included.</summary>
     public Arena.TurnLimits Limits() =>
@@ -150,7 +154,8 @@ public sealed record PipelineConfig(
         Check(Arene.PartiesMin >= 2 && Arene.PartiesMax >= Arene.PartiesMin, "arene.parties_min / parties_max", "il faut 2 ≤ min ≤ max");
         Check(Arene.Elo1 > Arene.Elo0, "arene.elo1", "doit dépasser arene.elo0");
         Check(Arene.PartiesProlongation >= Arene.PartiesMax, "arene.parties_prolongation", "au moins arene.parties_max (égal = jamais de prolongation)");
-        Check(Arene.LlrProlongation > 0, "arene.llr_prolongation", "positif");
+        Check(Arene.LlrProlongation >= 0, "arene.llr_prolongation", "positif ou nul");
+        Check(Arene.Elo1Prolongation > Arene.Elo0 && Arene.Elo1Prolongation <= Arene.Elo1, "arene.elo1_prolongation", "entre arene.elo0 (exclu) et arene.elo1");
         Check(Arene.Alpha is > 0 and < 0.5 && Arene.Beta is > 0 and < 0.5, "arene.alpha / beta", "entre 0 et 0,5");
         Check(Api.PartiesConfirmation >= 0, "api.parties_confirmation", "positif ou nul");
         Check(!string.IsNullOrWhiteSpace(Api.Adversaire), "api.adversaire", "obligatoire (« boss » ou un agent_id)");

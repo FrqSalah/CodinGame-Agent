@@ -14,8 +14,9 @@ public sealed record DuelOutcome(int Wins, int Losses, int Draws, SprtDecision D
 /// séquentiel tranche. Chaque graine (donc chaque circuit) est jouée deux fois, places
 /// échangées, pour que l'avantage d'une place ne compte pas. Les graines vont de 1 à N :
 /// tous les essais sont mesurés sur les mêmes circuits. Une faute du candidat arrête tout.
-/// Si le plafond est atteint sans verdict alors que le candidat mène nettement, le duel est
-/// prolongé : les petits progrès, de plus en plus fréquents, demandent plus de parties.
+/// Second round: a duel that reaches its cap without a verdict, with a candidate that leads,
+/// goes on with a lower bar (<c>arene.elo1_prolongation</c>) up to <c>arene.parties_prolongation</c>
+/// games. Near the top, gains are small: 52 to 53 % of wins needs about 2,000 games to be proven.
 /// </summary>
 public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
 {
@@ -112,12 +113,18 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         await Task.WhenAll(running);
         ct.ThrowIfCancellationRequested();
 
-        if (fault is null && decision == SprtDecision.Continue && ShouldProlong(settings, limit, sprt.Llr(wins, losses)))
+        var second = new Sprt(settings.Elo0, settings.Elo1Prolongation, settings.Alpha, settings.Beta);
+        if (fault is null && decision == SprtDecision.Continue && ShouldProlong(settings, limit, second.Llr(wins, losses)))
         {
-            log.LogInformation("Duel prolongé de {De} à {A} parties : le candidat mène ({Wins} V / {Losses} D, LLR {Llr:F2})",
-                limit, settings.PartiesProlongation, wins, losses, sprt.Llr(wins, losses));
+            log.LogInformation("Deuxième manche, de {De} à {A} parties avec une barre plus basse (+{Elo} Elo) : le candidat mène ({Wins} V / {Losses} D, LLR {Llr:F2})",
+                limit, settings.PartiesProlongation, settings.Elo1Prolongation, wins, losses, second.Llr(wins, losses));
+            sprt = second;
             limit = settings.PartiesProlongation;
-            continue;
+            decision = sprt.Decide(wins, losses);
+            if (decision == SprtDecision.Continue)
+            {
+                continue;
+            }
         }
 
         break;
@@ -135,7 +142,7 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         return outcome;
     }
 
-    /// <summary>Prolonger un duel arrivé au plafond sans verdict ? Une seule prolongation, si le candidat mène assez.</summary>
+    /// <summary>A second round for a duel at its cap without a verdict? Only once, when the candidate leads by the second round's test.</summary>
     internal static bool ShouldProlong(ArenaSettings settings, int limit, double llr) =>
         limit < settings.PartiesProlongation && llr >= settings.LlrProlongation;
 

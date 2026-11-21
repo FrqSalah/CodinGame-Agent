@@ -81,7 +81,9 @@ flowchart LR
 5. **Local duel**: candidate against champion with the
    [robostac referee](https://github.com/robostac/coders-strike-back-referee), each map played
    from both seats, in parallel, until Wald's SPRT reaches a verdict (H0: 0 Elo, H1: 40 Elo,
-   alpha = beta = 0.05). A duel that reaches its cap while the candidate leads is extended once.
+   alpha = beta = 0.05), at most 600 games. A duel that reaches this cap while the candidate
+   leads gets a second round with a lower bar (H1: 20 Elo, about 53 % of wins), up to 3,000
+   games: near the top, gains are small and need many games to be proven.
 6. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
    champion each play 4 games against 6 real players ranked up to 60 places above us, on the
    exact same maps. The candidate is rejected if it loses more of these games than the champion

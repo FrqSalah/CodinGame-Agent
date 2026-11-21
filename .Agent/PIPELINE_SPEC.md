@@ -19,7 +19,8 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
      │
  LAB                     ── quick games vs the champion; a fault or a clear deficit goes back
      │                      to the coder, up to 2 times
- LOCAL DUEL              ── candidate vs champion with the robostac engine, until the SPRT verdict
+ LOCAL DUEL              ── candidate vs champion with the robostac engine, until the SPRT verdict;
+     │                      a candidate that leads at 600 games gets a second round, lower bar
      │
  CONFIRMATION            ── CodinGame test games vs 6 real players ranked above us, same maps
      │                      as the champion
@@ -213,6 +214,12 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
 - **2026-11-20**: the thinker's note starts at its last `IDEA:` label. Trial 189's thinker sent
   its draft first (the prompt's format quoted, a word count) and the idea was read as « one
   sentence. »; the draft is now dropped before the idea, the target and the coder's note.
+  Second round of the duel, in place of the extension: since 2026-11-18, candidates at 51 to 53 %
+  of wins over 600 games were rejected (trials 176, 179, 191) since the bar is 40 Elo (about
+  56 %). A duel at its cap without a verdict, whose candidate leads by a second test with a
+  lower bar (`arene.elo1_prolongation`, 20 Elo, about 53 %; `llr_prolongation` 0), goes on with
+  that test up to `parties_prolongation` (3,000) games. A 52.7 % candidate needs about 2,000
+  games on average: with a 2,000 cap, it would be proven only half the time.
   The note is then checked: an idea label whose text is not copied from the prompt, a known
   target, at most `boucle.mots_note_max` words (also the limit the prompt states). A failing
   note is asked again once with its problems; a second failure ends the trial as

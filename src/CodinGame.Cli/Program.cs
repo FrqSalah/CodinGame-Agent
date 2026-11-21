@@ -250,8 +250,10 @@ async Task<int> LocalDuel()
     var (ctx, journal) = farm.Open(name);
     using (journal)
     {
-        var settings = rest.Length > 2
-            ? ctx.Config.Arene with { PartiesMax = int.Parse(rest[2], CultureInfo.InvariantCulture), PartiesMin = Math.Min(ctx.Config.Arene.PartiesMin, int.Parse(rest[2], CultureInfo.InvariantCulture)) }
+        // A duel of n games stops at n: no second round.
+        var n = rest.Length > 2 ? int.Parse(rest[2], CultureInfo.InvariantCulture) : 0;
+        var settings = n > 0
+            ? ctx.Config.Arene with { PartiesMax = n, PartiesMin = Math.Min(ctx.Config.Arene.PartiesMin, n), PartiesProlongation = n }
             : ctx.Config.Arene;
         var a = await ctx.Builder.BuildAsync(await File.ReadAllTextAsync(rest[0], ct), ct);
         var b = await ctx.Builder.BuildAsync(await File.ReadAllTextAsync(rest[1], ct), ct);
