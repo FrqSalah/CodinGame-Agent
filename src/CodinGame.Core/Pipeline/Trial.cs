@@ -47,20 +47,24 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     /// sans repasser par le penseur ni le codeur. Le rejugement est un nouvel essai du journal.
     /// </param>
     /// <param name="given">Candidat fourni de l'extérieur (commande <c>juger</c>), jugé de la même façon.</param>
-    public async Task<TrialVerdict> RunAsync(CancellationToken ct, long? rejudge = null, GivenCandidate? given = null)
+    /// <param name="resume">
+    /// An open trial that a stop interrupted (<see cref="Journal.ResumableTrial"/>): its candidate is
+    /// judged again from the duel games already journaled, under the same trial number.
+    /// </param>
+    public async Task<TrialVerdict> RunAsync(CancellationToken ct, long? rejudge = null, GivenCandidate? given = null, long? resume = null)
     {
         var cfg = ctx.Config;
         var journal = ctx.Journal;
         var championHash = journal.ChampionHash() ?? throw new InvalidOperationException("Aucun champion.");
         var championSource = journal.BotSource(championHash)!;
-        var id = journal.StartTrial(championHash, Label(cfg.Agents.Penseur), Label(cfg.Agents.Codeur));
+        var id = resume ?? journal.StartTrial(championHash, Label(cfg.Agents.Penseur), Label(cfg.Agents.Codeur));
         Telemetry.SetTrialNumber(id);
 
         using var activity = Telemetry.Source.StartActivity("essai");
         activity?.SetTag("pipeline", ctx.Name);
         activity?.SetTag("essai", id);
         using var scope = log.BeginScope(new Dictionary<string, object> { ["pipeline"] = ctx.Name, ["essai"] = id });
-        log.LogInformation("Essai {Essai} : début (champion {Champion})", id, championHash);
+        log.LogInformation("Essai {Essai} : {Debut} (champion {Champion})", id, resume is null ? "début" : "reprise après un arrêt", championHash);
 
         var dir = Path.Combine(ctx.Paths.Trials, id.ToString("D4", CultureInfo.InvariantCulture));
         TrialVerdict verdict;
@@ -71,7 +75,9 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                 ? await JudgeGivenAsync(id, given, championHash, championSource, ct)
                 : rejudge is { } of
                     ? await RejudgeStepsAsync(id, of, championHash, championSource, ct)
-                    : await RunStepsAsync(id, dir, championHash, championSource, ct);
+                    : resume is not null
+                        ? await ResumeStepsAsync(id, championHash, championSource, ct)
+                        : await RunStepsAsync(id, dir, championHash, championSource, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -303,6 +309,17 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return await JudgeGivenAsync(id, new GivenCandidate(candidate, $"Rejugement de l'essai {of} : {idea}", note ?? ""), championHash, championSource, ct);
     }
 
+    /// <summary>Judges again the candidate of an interrupted trial, from the duel games it already played.</summary>
+    private async Task<(TrialVerdict, DuelOutcome?)> ResumeStepsAsync(long id, string championHash, string championSource, CancellationToken ct)
+    {
+        var hash = ctx.Journal.TrialCandidate(id).Hash ?? throw new InvalidOperationException($"L'essai {id} n'a pas de candidat dans le journal.");
+        var candidate = ctx.Journal.BotSource(hash) ?? throw new InvalidOperationException($"Le source du candidat {hash} manque au journal.");
+        var build = await ctx.Builder.BuildAsync(candidate, ct);
+        return build.Success
+            ? await JudgeAsync(id, hash, candidate, build.Executable!, championHash, championSource, ct, ctx.Journal.LocalGames(id))
+            : (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
+    }
+
     /// <summary>Juge un candidat fourni tel quel : mêmes étapes et mêmes seuils que pour un candidat des agents.</summary>
     private async Task<(TrialVerdict, DuelOutcome?)> JudgeGivenAsync(
         long id, GivenCandidate given, string championHash, string championSource, CancellationToken ct)
@@ -329,7 +346,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
     /// et soumission. Seul ce calcul décide si un candidat devient champion.
     /// </summary>
     private async Task<(TrialVerdict, DuelOutcome?)> JudgeAsync(
-        long id, string hash, string candidate, string candidateExe, string championHash, string championSource, CancellationToken ct)
+        long id, string hash, string candidate, string candidateExe, string championHash, string championSource, CancellationToken ct,
+        IReadOnlyList<PlayedGame>? played = null)
     {
         var cfg = ctx.Config;
         var journal = ctx.Journal;
@@ -354,7 +372,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                         journal.AddAnalysis(analysis);
                     }
                 },
-                ct, relay: true);
+                ct, relay: true, played);
         }
 
         // What the duel measured, candidate against champion: the agents see it in the history.

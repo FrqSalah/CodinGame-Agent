@@ -1,4 +1,5 @@
 using System.Globalization;
+using CodinGame.Core.Arena;
 using Microsoft.Data.Sqlite;
 
 namespace CodinGame.Core.Data;
@@ -203,9 +204,27 @@ public sealed class Journal : IDisposable
             WHERE id = $id
             """, ("$f", Now()), ("$v", verdict), ("$r", reason), ("$w", wins), ("$l", losses), ("$d", draws), ("$x", llr), ("$id", id));
 
-    /// <summary>Clôt les essais restés ouverts (arrêt brutal) : ils ne sont pas repris.</summary>
-    public int CloseInterruptedTrials() =>
-        Exec("UPDATE essais SET fin = $f, verdict = 'INTERROMPU', raison = 'arrêt pendant l''essai' WHERE fin IS NULL", ("$f", Now()));
+    /// <summary>Closes the trials left open by a stop, except the one that goes on (<see cref="ResumableTrial"/>).</summary>
+    public int CloseInterruptedTrials(long? except = null) =>
+        Exec("UPDATE essais SET fin = $f, verdict = 'INTERROMPU', raison = 'arrêt pendant l''essai' WHERE fin IS NULL AND id IS NOT $k",
+            ("$f", Now()), ("$k", except));
+
+    /// <summary>
+    /// The trial a stop interrupted that can go on: the latest one still open whose candidate is
+    /// written, against the current champion. Its thinker and coder are not asked again.
+    /// </summary>
+    public long? ResumableTrial()
+    {
+        var id = Scalar(
+            "SELECT id FROM essais WHERE fin IS NULL AND candidat_hash IS NOT NULL AND champion_hash = $c ORDER BY id DESC LIMIT 1",
+            ("$c", ChampionHash()));
+        return id is null or DBNull ? null : Convert.ToInt64(id, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The duel games of a trial, in the order they were played.</summary>
+    public IReadOnlyList<PlayedGame> LocalGames(long trialId) =>
+        Query("SELECT graine, candidat_joueur, resultat, faute FROM parties_locales WHERE essai_id = $e ORDER BY id",
+            r => new PlayedGame(r.GetInt64(0), r.GetInt32(1), r.GetString(2), Str(r, 3)), ("$e", trialId));
 
     public IReadOnlyList<TrialSummary> RecentTrials(int count) =>
         Query("""

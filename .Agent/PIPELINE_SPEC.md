@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-20
+> **Status**: in production on the VPS · **Last updated**: 2026-11-21
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -68,12 +68,12 @@ thanks to `pipelines/mad-pod-racing/silver/Bot.cpp`, reached Legend the same day
 
 | Part | File | Role |
 | :--- | :--- | :--- |
-| Configuration | `Core/Config/PipelineConfig.cs` | Seed + live file merged; typos rejected, faulty field named |
+| Configuration | `Core/Config/PipelineConfig.cs` | Seed + live file merged; typos rejected, faulty field named; a value never changed by hand follows the seed |
 | Journal | `Core/Data/Journal.cs` | SQLite: bot sources, trials, local and API games, champions (with submission and real score), fresh-look directions, hourly ranking |
 | API client | `Core/CodinGameApi/CodinGameClient.cs` | Only access to CodinGame. Token read at every call, never logged. One test game at a time, limits read from the responses |
 | Engine | `Core/Arena/RefereeGame.cs` | Relay to an existing engine with the `cg-brutaltester` protocol; enforces time limits |
 | Bots | `Core/Arena/BotBuilder.cs`, `BotProcess.cs` | Build cached by source hash; process driven line by line, as the `bot` user |
-| Duel | `Core/Arena/Duel.cs` | Seeds 1..N, each played from both seats, in parallel, until the verdict |
+| Duel | `Core/Arena/Duel.cs` | Seeds 1..N, each played from both seats, in parallel, until the verdict; resumed from its journaled games after a restart |
 | Judge | `Core/Judging/Sprt.cs` | Wald's sequential test (H0: 0 Elo, H1: `elo1`) |
 | Confirmation | `Core/Pipeline/Confirmation.cs` | Fixed rule picking real opponents above us; game-by-game comparison with the champion |
 | Ranking loop | `Core/Pipeline/RankingCheck.cs` | Fixed rule withdrawing a champion that scores clearly lower than the previous one |
@@ -98,7 +98,9 @@ English.
 Live data (on the VPS, under the data folder `pipelines/mad-pod-racing/`): `pipeline.json` and
 `consignes.md` editable while running, `champion.cpp`, `regles.md` (official statement, in the
 account's language), `orientation.md`, `matches.db`, `essais/NNNN/`, `cache/`. A
-`prompts/<role>.md` file placed there replaces the shipped template.
+`prompts/<role>.md` file placed there replaces the shipped template. `pipeline.defauts.json`
+holds the seed last applied: a live value still equal to it follows a new default; a value
+changed by hand is kept. Without that file (first start), every live value counts as set by hand.
 
 ## 6. The coder's lab (2026-11-17)
 
@@ -160,8 +162,11 @@ limit slightly differently).
 - **CI** (`.github/workflows/ci.yml`): builds the image, which compiles and runs the tests, real
   engine games included. If everything passes, moves the `deploy` branch.
 - **VPS**: a systemd timer (`codingame-farm-update.timer`) checks `deploy` every 2 minutes and
-  rebuilds when it moved. No secret is stored on GitHub. A push interrupts the running trial:
-  group pushes.
+  rebuilds when it moved. No secret is stored on GitHub. The trial a restart interrupts goes on
+  at the next start, under its number: if its candidate is written and the champion has not
+  changed, it is judged again from its journaled duel games (in its second round if it was in
+  it), without the thinker, the coder or the lab. A trial stopped earlier is closed
+  `INTERROMPU`. Pushes are still grouped: each one costs the games in flight.
 - **Containers** (`deploy/docker-compose.yml`): `farm`, `dashboard` (Aspire 13.6) and `vps`, an
   official OpenTelemetry collector sending the machine's state (CPU, load, memory, disks) every
   30 seconds.
@@ -227,6 +232,12 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   the 17 notes since the target line, only one (454 words) would have been asked again. Real
   games are replayed on the local engine for the loss analysis (section 8): every ranked game of
   any champion is measured, the trace line is gone.
+- **2026-11-21**: second round checked on the VPS: trials 191 and 176 rejudged, both rejected
+  (100 / 114; then 754 / 762 after a second round from 309 / 291 at 600): near ties, not small
+  gains. Three games at once (`arene.parallele` 3): no timeout over 120 champion games, about
+  330 games an hour instead of 220. A restart no longer loses the trial in progress: it resumes
+  from its journaled duel games. A setting left at its default follows a new default (before,
+  each changed default had to be edited by hand on the VPS).
 
 ## 12. Still unverified
 

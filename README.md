@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-20
+> **Status**: in production · **Last updated**: 2026-11-21
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -170,7 +170,10 @@ dotnet run --project src/CodinGame.AppHost
 
 `pipelines/<game>/pipeline.json` is the seed shipped in the image. The live copy under the data
 folder on the VPS overrides it, is read again at every trial, and can be edited without
-rebuilding. Unknown keys are rejected with the faulty field named. Main sections:
+rebuilding. Unknown keys are rejected with the faulty field named. A value never changed by hand
+follows the seed: when a new version changes a default, the live value still at the former
+default takes the new one (the seed last applied is kept next to the live file,
+`pipeline.defauts.json`). Main sections:
 
 | Section | Holds |
 | :--- | :--- |
@@ -204,8 +207,10 @@ are never taken from anywhere else.
 
 A push to `main` triggers the CI, which builds the Docker image (compiling and running the tests,
 real engine games included) and, if everything passes, moves the `deploy` branch. A systemd timer
-on the VPS checks that branch every 2 minutes, rebuilds and restarts the farm. A push therefore
-interrupts the trial in progress. `git reset --hard` is never used, in code or in deployment.
+on the VPS checks that branch every 2 minutes, rebuilds and restarts the farm. The trial a restart
+interrupts goes on when the farm starts again: its candidate is judged from the duel games already
+journaled, in the round it was in. Only a trial stopped before its candidate was written is lost.
+`git reset --hard` is never used, in code or in deployment.
 
 ## Third-party software
 

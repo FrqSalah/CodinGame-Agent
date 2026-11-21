@@ -18,6 +18,12 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
     private readonly Dictionary<string, int> _agentFailures = [];
     private readonly Dictionary<string, string> _lastStatus = [];
 
+    /// <summary>Pipelines whose interrupted trial was looked for, once per start of the farm.</summary>
+    private readonly HashSet<string> _startChecked = [];
+
+    /// <summary>The interrupted trial each pipeline resumes before starting a new one.</summary>
+    private readonly Dictionary<string, long> _toResume = [];
+
     public async Task RunForeverAsync(CancellationToken ct)
     {
         var names = paths.PipelineNames().ToList();
@@ -112,7 +118,15 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
             // The test game quota is checked when a candidate reaches the confirmation, not here:
             // most candidates never get there, and a trial should not wait for games it won't play.
             Status(name, "essai en cours", LogLevel.Information);
-            var verdict = await new Trial(ctx, api, agents, log).RunAsync(ct);
+            long? resume = _toResume.Remove(name, out var interrupted) ? interrupted : null;
+            if (resume is not null && journal.ResumableTrial() != resume)
+            {
+                // The champion changed meanwhile (rollback): the games played against the former one no longer count.
+                journal.CloseInterruptedTrials();
+                resume = null;
+            }
+
+            var verdict = await new Trial(ctx, api, agents, log).RunAsync(ct, resume: resume);
             if (verdict.Verdict == Verdicts.AgentFailure)
             {
                 _agentFailures[name] = _agentFailures.GetValueOrDefault(name) + 1;
@@ -261,7 +275,8 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
     /// <summary>
     /// Ouvre la configuration et le journal d'une pipeline. Seule la boucle clôt les essais restés
     /// ouverts : une commande de consultation (bilan, vérification) lancée pendant un essai ne doit
-    /// pas le marquer interrompu.
+    /// pas le marquer interrompu. At the farm's start, the trial a stop interrupted, if its candidate
+    /// is written, stays open: the loop resumes it before starting a new one (a deploy loses no duel).
     /// </summary>
     public (PipelineContext Context, Journal Journal) Open(string name, bool closeInterrupted = false)
     {
@@ -274,7 +289,13 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         }
 
         var journal = new Journal(p.Journal);
-        var closed = closeInterrupted ? journal.CloseInterruptedTrials() : 0;
+        if (closeInterrupted && _startChecked.Add(name) && journal.ResumableTrial() is { } resumable)
+        {
+            _toResume[name] = resumable;
+            log.LogInformation("Pipeline {Pipeline} : l'essai {Essai}, interrompu par un arrêt, reprend là où il en était", name, resumable);
+        }
+
+        var closed = closeInterrupted ? journal.CloseInterruptedTrials(_toResume.TryGetValue(name, out var kept) ? kept : null) : 0;
         var repaired = closeInterrupted ? journal.RepairIdeas(Trial.IdeaOf) : 0;
         if (repaired > 0)
         {

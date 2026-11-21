@@ -192,11 +192,21 @@ public sealed class ConfigException(string message) : Exception(message);
 /// du dossier de données, que l'utilisateur modifie. À la première lecture, la graine est
 /// copiée dans le dossier de données ; ensuite, seules les clés nouvelles y sont ajoutées.
 /// </summary>
+/// <summary>
+/// The live configuration is the shipped one (the seed) overlaid by the user's values. A value never
+/// changed by hand follows the seed: the seed last applied is kept next to the live file
+/// (<see cref="DefaultsPath"/>), and a live value still equal to it takes the new default.
+/// </summary>
 public static class ConfigLoader
 {
+    /// <summary>The seed that the live file <paramref name="dataPath"/> was last brought up to.</summary>
+    public static string DefaultsPath(string dataPath) =>
+        Path.Combine(Path.GetDirectoryName(dataPath)!, Path.GetFileNameWithoutExtension(dataPath) + ".defauts.json");
+
     public static PipelineConfig Load(string seedPath, string dataPath, List<string>? notes = null)
     {
         var seed = ParseObject(seedPath);
+        var defaultsPath = DefaultsPath(dataPath);
         if (!File.Exists(dataPath))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(dataPath)!);
@@ -204,13 +214,30 @@ public static class ConfigLoader
             notes?.Add($"configuration créée : {dataPath}");
         }
 
+        // Without the seed last applied (first start), every live value counts as set by hand.
         var user = ParseObject(dataPath);
+        var previous = File.Exists(defaultsPath) ? ParseObject(defaultsPath) : null;
         var added = new List<string>();
-        var merged = Merge((JsonObject)seed.DeepClone(), user, "", added);
-        if (added.Count > 0)
+        var followed = new List<string>();
+        var merged = Merge((JsonObject)seed.DeepClone(), user, previous, "", added, followed);
+        if (added.Count > 0 || followed.Count > 0)
         {
             File.WriteAllText(dataPath, merged.ToJsonString(PipelineConfig.Json));
+        }
+
+        if (added.Count > 0)
+        {
             notes?.Add($"nouvelles clés ajoutées à {dataPath} : {string.Join(", ", added)}");
+        }
+
+        if (followed.Count > 0)
+        {
+            notes?.Add($"réglages restés à leur valeur par défaut, mis à la nouvelle valeur : {string.Join(", ", followed)}");
+        }
+
+        if (previous is null || !JsonNode.DeepEquals(previous, seed))
+        {
+            File.WriteAllText(defaultsPath, seed.ToJsonString(PipelineConfig.Json));
         }
 
         PipelineConfig? config;
@@ -245,8 +272,12 @@ public static class ConfigLoader
         }
     }
 
-    /// <summary>Recouvre <paramref name="target"/> (la graine) par <paramref name="user"/>, et note les clés absentes chez l'utilisateur.</summary>
-    private static JsonObject Merge(JsonObject target, JsonObject user, string prefix, List<string> added)
+    /// <summary>
+    /// Overlays <paramref name="target"/> (the seed) with <paramref name="user"/>; notes the keys the
+    /// user lacks, and the user values still equal to the <paramref name="previous"/> seed that the
+    /// new seed changes (those take the new value).
+    /// </summary>
+    private static JsonObject Merge(JsonObject target, JsonObject user, JsonObject? previous, string prefix, List<string> added, List<string> followed)
     {
         foreach (var (key, value) in target.ToList())
         {
@@ -256,7 +287,11 @@ public static class ConfigLoader
             }
             else if (value is JsonObject seedChild && user[key] is JsonObject userChild)
             {
-                target[key] = Merge((JsonObject)seedChild.DeepClone(), userChild, prefix + key + ".", added);
+                target[key] = Merge((JsonObject)seedChild.DeepClone(), userChild, previous?[key] as JsonObject, prefix + key + ".", added, followed);
+            }
+            else if (previous is not null && previous.ContainsKey(key) && JsonNode.DeepEquals(user[key], previous[key]) && !JsonNode.DeepEquals(user[key], value))
+            {
+                followed.Add($"{prefix}{key} ({user[key]?.ToJsonString() ?? "null"} → {value?.ToJsonString() ?? "null"})");
             }
             else
             {

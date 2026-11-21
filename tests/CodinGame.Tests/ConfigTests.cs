@@ -65,6 +65,51 @@ public class ConfigTests : IDisposable
         Assert.Contains("agents.penseur.outil", ex.Message);
     }
 
+    [Fact]
+    public void A_setting_left_at_its_default_follows_a_new_default()
+    {
+        ConfigLoader.Load(SeedPath, DataPath);
+        var notes = new List<string>();
+
+        var cfg = ConfigLoader.Load(NewSeed(o => o["arene"]!["parties_prolongation"] = 5000), DataPath, notes);
+
+        Assert.Equal(5000, cfg.Arene.PartiesProlongation);
+        Assert.Contains(notes, n => n.Contains("arene.parties_prolongation (3000 → 5000)"));
+    }
+
+    [Fact]
+    public void A_setting_changed_by_hand_keeps_its_value_when_the_default_changes()
+    {
+        ConfigLoader.Load(SeedPath, DataPath);
+        Edit(o => o["arene"]!["parties_prolongation"] = 1234);
+
+        var cfg = ConfigLoader.Load(NewSeed(o => o["arene"]!["parties_prolongation"] = 5000), DataPath);
+
+        Assert.Equal(1234, cfg.Arene.PartiesProlongation);
+    }
+
+    [Fact]
+    public void Without_the_last_defaults_every_live_value_counts_as_set_by_hand()
+    {
+        ConfigLoader.Load(SeedPath, DataPath);
+        File.Delete(ConfigLoader.DefaultsPath(DataPath));
+        var seed = NewSeed(o => o["arene"]!["parties_prolongation"] = 5000);
+
+        Assert.Equal(3000, ConfigLoader.Load(seed, DataPath).Arene.PartiesProlongation);
+        Assert.True(File.Exists(ConfigLoader.DefaultsPath(DataPath)));
+        Assert.Equal(3000, ConfigLoader.Load(seed, DataPath).Arene.PartiesProlongation);
+    }
+
+    /// <summary>A copy of the shipped seed with one default changed, as a new version would ship it.</summary>
+    private string NewSeed(Action<JsonObject> change)
+    {
+        var o = JsonNode.Parse(File.ReadAllText(SeedPath))!.AsObject();
+        change(o);
+        var path = Path.Combine(_dir, "seed.json");
+        File.WriteAllText(path, o.ToJsonString());
+        return path;
+    }
+
     private void Edit(Action<JsonObject> change)
     {
         var o = JsonNode.Parse(File.ReadAllText(DataPath))!.AsObject();

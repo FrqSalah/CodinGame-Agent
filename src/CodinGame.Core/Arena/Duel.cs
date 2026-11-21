@@ -9,6 +9,9 @@ public sealed record DuelOutcome(int Wins, int Losses, int Draws, SprtDecision D
     public int Games => Wins + Losses + Draws;
 }
 
+/// <summary>A duel game already journaled: its seed, the candidate's seat, its result for the candidate (<see cref="Results"/>), its fault.</summary>
+public sealed record PlayedGame(long Seed, int Seat, string Result, string? Fault);
+
 /// <summary>
 /// Fait s'affronter le candidat et le champion dans le simulateur, jusqu'à ce que le test
 /// séquentiel tranche. Chaque graine (donc chaque circuit) est jouée deux fois, places
@@ -17,6 +20,7 @@ public sealed record DuelOutcome(int Wins, int Losses, int Draws, SprtDecision D
 /// Second round: a duel that reaches its cap without a verdict, with a candidate that leads,
 /// goes on with a lower bar (<c>arene.elo1_prolongation</c>) up to <c>arene.parties_prolongation</c>
 /// games. Near the top, gains are small: 52 to 53 % of wins needs about 2,000 games to be proven.
+/// A duel stopped by a restart goes on from its journaled games (<c>played</c>), in the round it was in.
 /// </summary>
 public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
 {
@@ -25,9 +29,11 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         string championExe,
         Action<long, int, MatchResult>? record,
         CancellationToken ct,
-        bool relay = false)
+        bool relay = false,
+        IReadOnlyList<PlayedGame>? played = null)
     {
         var sprt = new Sprt(settings.Elo0, settings.Elo1, settings.Alpha, settings.Beta);
+        var second = new Sprt(settings.Elo0, settings.Elo1Prolongation, settings.Alpha, settings.Beta);
         var limits = settings.Limits();
 
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -40,10 +46,61 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         var limit = settings.PartiesMax;
         var k = 0;
 
+        // Game k is seed k / 2 + 1 with the candidate in seat k % 2: the games already played are skipped.
+        var done = new HashSet<long>();
+        foreach (var g in played ?? [])
+        {
+            done.Add(((g.Seed - 1) * 2) + g.Seat);
+            if (g.Fault is not null)
+            {
+                fault ??= g.Fault;
+            }
+            else if (g.Result == Results.Draw)
+            {
+                draws++;
+            }
+            else if (g.Result == Results.Win)
+            {
+                wins++;
+            }
+            else
+            {
+                losses++;
+            }
+        }
+
+        if (done.Count > settings.PartiesMax && settings.PartiesProlongation > settings.PartiesMax)
+        {
+            // Only a second round goes past the first round's cap.
+            sprt = second;
+            limit = settings.PartiesProlongation;
+        }
+
+        if (done.Count >= settings.PartiesMin)
+        {
+            decision = sprt.Decide(wins, losses);
+        }
+
+        if (done.Count > 0)
+        {
+            log.LogInformation("Duel repris : {Wins} V / {Losses} D / {Draws} N déjà joués{Round}", wins, losses, draws,
+                limit > settings.PartiesMax ? ", en deuxième manche" : "");
+        }
+
+        if (fault is not null || decision != SprtDecision.Continue)
+        {
+            stop.Cancel();
+        }
+
         while (true)
         {
         for (; k < limit; k++)
         {
+            if (done.Contains(k))
+            {
+                continue;
+            }
+
             try
             {
                 await slots.WaitAsync(stop.Token);
@@ -113,7 +170,6 @@ public sealed class Duel(RefereeGame game, ArenaSettings settings, ILogger log)
         await Task.WhenAll(running);
         ct.ThrowIfCancellationRequested();
 
-        var second = new Sprt(settings.Elo0, settings.Elo1Prolongation, settings.Alpha, settings.Beta);
         if (fault is null && decision == SprtDecision.Continue && ShouldProlong(settings, limit, second.Llr(wins, losses)))
         {
             log.LogInformation("Deuxième manche, de {De} à {A} parties avec une barre plus basse (+{Elo} Elo) : le candidat mène ({Wins} V / {Losses} D, LLR {Llr:F2})",
