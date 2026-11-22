@@ -397,6 +397,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (new TrialVerdict(Verdicts.Rejected, $"pas d'amélioration mesurée : {score}"), duel);
         }
 
+        if (ChampionChanged(championHash, score) is { } changed)
+        {
+            return (changed, duel);
+        }
+
         // 5. Banc d'adversaires extérieurs : battre le champion ne suffit pas, il ne faut pas faire
         //    moins bien que lui contre des bots d'autres joueurs, situation par situation.
         if (cfg.Banc.Adversaires.Count > 0)
@@ -467,6 +472,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             }
         }
 
+        if (ChampionChanged(championHash, score) is { } late)
+        {
+            return (late, duel);
+        }
+
         journal.SetChampion(hash, id);
         await File.WriteAllTextAsync(ctx.Paths.ChampionFile(botFile), candidate, ct);
         if (cfg.Api.SoumettreChampions)
@@ -479,6 +489,17 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         return (new TrialVerdict(Verdicts.Kept, score), duel);
     }
+
+    /// <summary>
+    /// A candidate is promoted only over the champion it was measured against. The champion can change
+    /// during a trial (a rollback of the ranking loop, a rejudge kept meanwhile): beating the former one
+    /// says nothing about the new one, so the candidate is rejected, to be rejudged against it.
+    /// </summary>
+    private TrialVerdict? ChampionChanged(string measuredAgainst, string score) =>
+        ctx.Journal.ChampionHash() is { } now && now != measuredAgainst
+            ? new TrialVerdict(Verdicts.Rejected,
+                $"meilleur que le champion {measuredAgainst}, mais le champion est devenu {now} pendant l'essai : à rejuger contre lui ; {score}")
+            : null;
 
     /// <summary>Résultat du banc : situations comparées, gagnées par chacun, et écart situation par situation.</summary>
     private sealed record BenchOutcome(int Cases, int CandidateWins, int ChampionWins, int Plus, int Minus);

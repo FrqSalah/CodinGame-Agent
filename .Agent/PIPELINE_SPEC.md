@@ -244,6 +244,10 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   against 8 / 24 (+3 / -4): a 50 % chance result. The old rule (« more losses than the
   champion ») rejected about 4 truly better candidates in 10 at that last step. A rejudge
   against the same champion goes on from the trial's duel games instead of replaying them.
+  Trial 202, rejudged as trial 209: 13 / 24 against 17 / 24 (+2 / -6, 15 % by chance), kept
+  and submitted; its real score decides (rollback). A candidate is promoted only over the
+  champion it was measured against: trial 208, started before 209 was kept, would otherwise
+  have replaced it without facing it.
 
 ## 12. Still unverified
 

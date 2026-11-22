@@ -91,7 +91,9 @@ flowchart LR
    5 % of the time (sign test, `api.confirmation_alpha`). One or two games apart prove nothing
    on 24 games; the real score has the last word (step 8). Opponents are picked by a fixed rule,
    not by an AI.
-7. **Promotion**: the candidate becomes champion and is submitted to the leaderboard.
+7. **Promotion**: the candidate becomes champion and is submitted to the leaderboard, unless the
+   champion changed during the trial (a rollback, a rejudge kept meanwhile): beating the former
+   one says nothing about the new one, so the candidate is rejected, to be rejudged.
 8. **Real score**: once the submission is fully ranked, its score is stored with the champion.
    If it is lower than the previous champion's by more than 1 point, the new champion is
    withdrawn and the previous one is resubmitted. The agents see real scores and withdrawals in
