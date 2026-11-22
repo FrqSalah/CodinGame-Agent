@@ -35,7 +35,8 @@
     "confirmation_rangs_au_dessus": 60,
     "soumettre_champions": true,
     "releve_classement_minutes": 60,
-    "retour_si_baisse": 1.0
+    "retour_si_baisse": 1.0,
+    "confirmation_alpha": 0.05
   },
   "boucle": {
     "actif": true,

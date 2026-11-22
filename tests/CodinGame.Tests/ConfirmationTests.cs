@@ -63,4 +63,22 @@ public class TestGameQuotaTests
         Assert.Equal("30 test games left in window test_games_1h, 48 needed",
             CodinGame.Core.CodinGameApi.CodinGameClient.TestGameShortfall(used, 48));
     }
+
+    [Theory]
+    [InlineData(3, 4, false)]   // trial 202: better over 2,804 local games, one game apart on CodinGame
+    [InlineData(1, 6, false)]   // 6 % by chance: still not proven
+    [InlineData(0, 5, true)]    // 3 % by chance
+    [InlineData(1, 7, true)]
+    [InlineData(4, 3, false)]
+    [InlineData(0, 0, false)]
+    public void Only_a_clear_deficit_against_real_players_rejects(int plus, int minus, bool rejected) =>
+        Assert.Equal(rejected, Confirmation.ClearlyWorse(plus, minus, 0.05));
+
+    [Fact]
+    public void The_sign_test_counts_the_games_only_one_of_them_wins()
+    {
+        Assert.Equal(0.5, Confirmation.SignTest(3, 4), 9);
+        Assert.Equal(1.0 / 32, Confirmation.SignTest(0, 5), 9);
+        Assert.Equal(8.0 / 128, Confirmation.SignTest(1, 6), 9);
+    }
 }

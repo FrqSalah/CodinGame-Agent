@@ -75,6 +75,7 @@ public class ResumeTests
             journal.StartTrial("champ", "p", "c");   // still with the thinker: nothing to resume
 
             Assert.Equal(latest, journal.ResumableTrial());
+            Assert.Equal("former-champ", journal.TrialChampion(other));
             Assert.Equal([new PlayedGame(1, 0, Results.Win, null), new PlayedGame(1, 1, Results.Loss, null)], journal.LocalGames(latest));
             Assert.Equal(3, journal.CloseInterruptedTrials(except: latest));
             Assert.Equal(latest, journal.ResumableTrial());

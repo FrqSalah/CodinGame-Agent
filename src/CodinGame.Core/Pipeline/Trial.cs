@@ -294,7 +294,10 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
         return sb.ToString();
     }
 
-    /// <summary>Rejuge le candidat d'un essai passé contre le champion actuel.</summary>
+    /// <summary>
+    /// Rejuge le candidat d'un essai passé contre le champion actuel. Against the same champion, the
+    /// duel goes on from that trial's games: the same pair on the same seeds, already measured.
+    /// </summary>
     private async Task<(TrialVerdict, DuelOutcome?)> RejudgeStepsAsync(
         long id, long of, string championHash, string championSource, CancellationToken ct)
     {
@@ -306,7 +309,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             throw new InvalidOperationException($"L'essai {of} n'a pas de candidat dans le journal.");
         }
 
-        return await JudgeGivenAsync(id, new GivenCandidate(candidate, $"Rejugement de l'essai {of} : {idea}", note ?? ""), championHash, championSource, ct);
+        var played = journal.TrialChampion(of) == championHash ? journal.LocalGames(of) : null;
+        return await JudgeGivenAsync(id, new GivenCandidate(candidate, $"Rejugement de l'essai {of} : {idea}", note ?? ""), championHash, championSource, ct, played);
     }
 
     /// <summary>Judges again the candidate of an interrupted trial, from the duel games it already played.</summary>
@@ -322,7 +326,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
     /// <summary>Juge un candidat fourni tel quel : mêmes étapes et mêmes seuils que pour un candidat des agents.</summary>
     private async Task<(TrialVerdict, DuelOutcome?)> JudgeGivenAsync(
-        long id, GivenCandidate given, string championHash, string championSource, CancellationToken ct)
+        long id, GivenCandidate given, string championHash, string championSource, CancellationToken ct,
+        IReadOnlyList<PlayedGame>? played = null)
     {
         var journal = ctx.Journal;
         var hash = BotBuilder.Hash(given.Source);
@@ -337,7 +342,7 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         var build = await ctx.Builder.BuildAsync(given.Source, ct);
         return build.Success
-            ? await JudgeAsync(id, hash, given.Source, build.Executable!, championHash, championSource, ct)
+            ? await JudgeAsync(id, hash, given.Source, build.Executable!, championHash, championSource, ct, played)
             : (new TrialVerdict(Verdicts.NoCompile, Clip(build.Errors, 300)), null);
     }
 
@@ -419,8 +424,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
         // 6. Confirmation sur CodinGame : le vrai moteur, le vrai compilateur, les vraies limites de temps,
         //    contre de vrais joueurs classés juste au-dessus de nous (api.confirmation_joueurs). Le candidat
-        //    rejoue exactement les circuits du champion contre chaque adversaire ; il est jeté s'il perd
-        //    plus de ces parties que le champion n'en perd de son côté.
+        //    rejoue exactement les circuits du champion contre chaque adversaire. It is rejected on a
+        //    fault, or when it does clearly worse than the champion (Confirmation.ClearlyWorse).
         var k = cfg.Api.PartiesConfirmation;
         if (k > 0)
         {
@@ -450,9 +455,11 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
                     return (new TrialVerdict(Verdicts.Fault, $"CodinGame : {faults} partie(s) en faute (plantage, temps ou coup invalide)"), duel);
                 }
 
-                if (cfg.Api.ConfirmationJoueurs > 0 && minus > plus)
+                if (cfg.Api.ConfirmationJoueurs > 0 && Confirmation.ClearlyWorse(plus, minus, cfg.Api.ConfirmationAlpha))
                 {
-                    return (new TrialVerdict(Verdicts.Rejected, $"meilleur que le champion en local mais moins bon que lui contre de vrais joueurs : {score} ; {line}"), duel);
+                    var chance = Confirmation.SignTest(plus, minus).ToString("P0", CultureInfo.InvariantCulture);
+                    return (new TrialVerdict(Verdicts.Rejected,
+                        $"meilleur que le champion en local mais nettement moins bon que lui contre de vrais joueurs (hasard : {chance}) : {score} ; {line}"), duel);
                 }
 
                 Telemetry.SetChampionScore(candWins, n);

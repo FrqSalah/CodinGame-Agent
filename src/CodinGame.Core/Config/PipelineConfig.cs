@@ -50,9 +50,13 @@ public sealed record ArenaSettings(
 /// champion's by more than this many points, the previous champion is restored and resubmitted.
 /// 0 disables it.
 /// </param>
+/// <param name="ConfirmationAlpha">
+/// A candidate is rejected by the real players only when it does clearly worse than the champion:
+/// a candidate as good would lose that many more of the games they split at most this often (sign test).
+/// </param>
 public sealed record ApiSettings(
     int PartiesConfirmation, string Adversaire, int ConfirmationJoueurs, int ConfirmationRangsAuDessus,
-    bool SoumettreChampions, int ReleveClassementMinutes, double RetourSiBaisse)
+    bool SoumettreChampions, int ReleveClassementMinutes, double RetourSiBaisse, double ConfirmationAlpha)
 {
     /// <summary>Parties de test que coûte la confirmation d'un candidat, champion compris.</summary>
     public int ConfirmationCost => 2 * PartiesConfirmation * Math.Max(1, ConfirmationJoueurs);
@@ -161,6 +165,7 @@ public sealed record PipelineConfig(
         Check(!string.IsNullOrWhiteSpace(Api.Adversaire), "api.adversaire", "obligatoire (« boss » ou un agent_id)");
         Check(Api.ConfirmationJoueurs >= 0, "api.confirmation_joueurs", "positif ou nul");
         Check(Api.RetourSiBaisse >= 0, "api.retour_si_baisse", "positif ou nul (0 : jamais de retour)");
+        Check(Api.ConfirmationAlpha is > 0 and < 1, "api.confirmation_alpha", "entre 0 et 1 exclus");
         Check(Laboratoire.Parties >= 0, "laboratoire.parties", "positif ou nul (0 : pas de laboratoire)");
         Check(Laboratoire.RevisionsMax >= 0, "laboratoire.revisions_max", "positif ou nul");
         Check(Laboratoire.SeuilRevision is >= 0 and <= 1, "laboratoire.seuil_revision", "entre 0 et 1");

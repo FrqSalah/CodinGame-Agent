@@ -221,6 +221,10 @@ public sealed class Journal : IDisposable
         return id is null or DBNull ? null : Convert.ToInt64(id, CultureInfo.InvariantCulture);
     }
 
+    /// <summary>The champion a trial's candidate was measured against.</summary>
+    public string? TrialChampion(long id) =>
+        Scalar("SELECT champion_hash FROM essais WHERE id = $id", ("$id", id)) as string;
+
     /// <summary>The duel games of a trial, in the order they were played.</summary>
     public IReadOnlyList<PlayedGame> LocalGames(long trialId) =>
         Query("SELECT graine, candidat_joueur, resultat, faute FROM parties_locales WHERE essai_id = $e ORDER BY id",

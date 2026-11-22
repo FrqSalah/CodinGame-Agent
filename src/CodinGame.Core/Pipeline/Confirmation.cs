@@ -47,4 +47,38 @@ public static class Confirmation
 
         return (plus, minus, cw, chw);
     }
+
+    /// <summary>
+    /// Sign test: the chance that a candidate exactly as good as the champion loses at least
+    /// <paramref name="minus"/> of the <paramref name="plus"/> + <paramref name="minus"/> games that only one of them wins.
+    /// </summary>
+    public static double SignTest(int plus, int minus)
+    {
+        var n = plus + minus;
+        var p = 0.0;
+        for (var k = minus; k <= n; k++)
+        {
+            p += Binomial(n, k);
+        }
+
+        return p / Math.Pow(2, n);
+    }
+
+    /// <summary>
+    /// Worse than the champion against real players, beyond chance. On 24 games, one or two games
+    /// apart prove nothing: trial 202, better over 2,804 local games, was rejected at +3 / -4. The
+    /// real leaderboard has the last word (rollback, <c>api.retour_si_baisse</c>).
+    /// </summary>
+    public static bool ClearlyWorse(int plus, int minus, double alpha) => minus > plus && SignTest(plus, minus) <= alpha;
+
+    private static double Binomial(int n, int k)
+    {
+        var r = 1.0;
+        for (var i = 1; i <= k; i++)
+        {
+            r = r * (n - k + i) / i;
+        }
+
+        return r;
+    }
 }

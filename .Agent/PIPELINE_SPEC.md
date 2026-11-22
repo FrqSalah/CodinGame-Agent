@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-21
+> **Status**: in production on the VPS · **Last updated**: 2026-11-22
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -23,7 +23,7 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
      │                      a candidate that leads at 600 games gets a second round, lower bar
      │
  CONFIRMATION            ── CodinGame test games vs 6 real players ranked above us, same maps
-     │                      as the champion
+     │                      as the champion; rejected on a fault or a clear deficit (sign test)
  VERDICT                 ── GARDE (new champion, submitted) or JETE / FAUTE / NON_COMPILE / ECHEC_AGENT / NOTE_REFUSEE
      │
  JOURNAL (matches.db)    ──► read by the thinker at the next trial
@@ -238,6 +238,12 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   330 games an hour instead of 220. A restart no longer loses the trial in progress: it resumes
   from its journaled duel games. A setting left at its default follows a new default (before,
   each changed default had to be edited by hand on the VPS).
+- **2026-11-22**: the real-player confirmation rejects only a fault or a clear deficit (sign test
+  on the games only one of the two wins, `api.confirmation_alpha` 0.05), approved by the user.
+  Trial 202, better over 2,804 local games (52.4 %, second round), had been rejected at 7 / 24
+  against 8 / 24 (+3 / -4): a 50 % chance result. The old rule (« more losses than the
+  champion ») rejected about 4 truly better candidates in 10 at that last step. A rejudge
+  against the same champion goes on from the trial's duel games instead of replaying them.
 
 ## 12. Still unverified
 
