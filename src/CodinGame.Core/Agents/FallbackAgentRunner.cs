@@ -5,12 +5,13 @@ using Microsoft.Extensions.Logging;
 namespace CodinGame.Core.Agents;
 
 /// <summary>
-/// Utilise toujours le modèle le plus fort de la chaîne d'un rôle (<c>modele</c>, puis
-/// <c>secours</c>). Quand un modèle atteint sa limite ou est indisponible, il est bloqué pour une
-/// durée donnée — blocage écrit sur disque, donc conservé aux redémarrages — et l'appel repart
-/// aussitôt avec le modèle suivant. Une fois le délai écoulé, le plus fort est réessayé.
+/// Always uses the strongest model of a role's chain (<c>modele</c>, then <c>secours</c>). A model
+/// at its limit or unavailable is set aside for a given time, recorded on disk so it survives
+/// restarts, and the call moves at once to the next model; after that time the strongest is tried
+/// again. An unfinished answer (cut at the output token limit, or stopped by the time limit) is
+/// asked once more of the same model, then of the next one, without setting the model aside.
 /// </summary>
-public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPaths paths, ILogger<FallbackAgentRunner> log) : IAgentRunner
+public sealed partial class FallbackAgentRunner(IAgentRunner inner, FarmPaths paths, ILogger<FallbackAgentRunner> log) : IAgentRunner
 {
     private static readonly TimeSpan DefaultBlock = TimeSpan.FromHours(5);
     private readonly Lock _gate = new();
@@ -33,12 +34,21 @@ public sealed partial class FallbackAgentRunner(AntigravityRunner inner, FarmPat
                 continue;
             }
 
-            var result = await inner.RunAsync(request with { Settings = request.Settings with { Modele = model } }, ct);
+            var attempt = request with { Settings = request.Settings with { Modele = model } };
+            var result = await inner.RunAsync(attempt, ct);
             if (!result.Success && IsOverrun(result.Error))
             {
-                // Réponse coupée ou trop longue : le modèle reste utilisable, mais cet appel est
-                // retenté avec le suivant de la chaîne, sans le bloquer.
-                log.LogWarning("Modèle {Modele} : réponse inachevée ({Raison}), appel retenté avec le suivant de la chaîne",
+                // A cut answer is usually a one-off (the thinker on High, about one run in six, writes
+                // tens of thousands of characters instead of its note): the same model is asked again.
+                log.LogWarning("Modèle {Modele} : réponse inachevée ({Raison}), appel relancé une fois avec le même modèle",
+                    model, result.Error);
+                result = await inner.RunAsync(attempt, ct);
+            }
+
+            if (!result.Success && IsOverrun(result.Error))
+            {
+                // Cut twice: the model stays usable, but this call moves to the next one, without blocking it.
+                log.LogWarning("Modèle {Modele} : réponse encore inachevée ({Raison}), appel retenté avec le suivant de la chaîne",
                     model, result.Error);
                 last = result;
                 continue;

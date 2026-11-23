@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-22
+> **Status**: in production · **Last updated**: 2026-11-23
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -128,8 +128,8 @@ Gemini High) reviews the whole history and writes a new direction for the thinke
 Each role uses the strongest model of its chain first (`modele`, then `secours`). A model that
 hits its quota or becomes unavailable is set aside for `agents.blocage_minutes`, recorded on disk
 so it survives restarts, and the call moves to the next model. An unfinished answer (cut at the
-output token limit or stopped by the time limit) retries with the next model without blocking the
-first one. Antigravity's exit code proves nothing: the farm reads its JSON status and checks what
+output token limit or stopped by the time limit) is asked once more of the same model, then of the
+next one, without blocking the first one. Antigravity's exit code proves nothing: the farm reads its JSON status and checks what
 was actually produced.
 
 ## Repository layout

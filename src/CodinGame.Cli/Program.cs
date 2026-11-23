@@ -42,7 +42,10 @@ builder.Services.AddSingleton(sp => new CodinGameClient(
     sp.GetRequiredService<FarmPaths>().TokenFile,
     sp.GetRequiredService<ILogger<CodinGameClient>>()));
 builder.Services.AddSingleton<AntigravityRunner>();
-builder.Services.AddSingleton<IAgentRunner, FallbackAgentRunner>();
+builder.Services.AddSingleton<IAgentRunner>(sp => new FallbackAgentRunner(
+    sp.GetRequiredService<AntigravityRunner>(),
+    sp.GetRequiredService<FarmPaths>(),
+    sp.GetRequiredService<ILogger<FallbackAgentRunner>>()));
 builder.Services.AddSingleton<Farm>();
 
 using var host = builder.Build();

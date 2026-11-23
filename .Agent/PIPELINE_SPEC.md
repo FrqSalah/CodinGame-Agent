@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-22
+> **Status**: in production on the VPS · **Last updated**: 2026-11-23
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -248,6 +248,11 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   and submitted; its real score decides (rollback). A candidate is promoted only over the
   champion it was measured against: trial 208, started before 209 was kept, would otherwise
   have replaced it without facing it.
+- **2026-11-23**: 3 of the 17 thinker runs on High since the last deploy were cut at the output
+  token limit: instead of its 400-word note, the model wrote about 64,000 characters (a vague idea,
+  then its reasoning), and the farm moved those trials to Medium. Antigravity's own retry then
+  wrote a proper note, but the run still ended in error. An unfinished answer is now asked once
+  more of the same model before the next one.
 
 ## 12. Still unverified
 
