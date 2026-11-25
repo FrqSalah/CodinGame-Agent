@@ -46,17 +46,22 @@ public sealed record ArenaSettings(
 /// <param name="ConfirmationJoueurs">Nombre de vrais joueurs, classés au-dessus de nous, contre qui confirmer (0 : <paramref name="Adversaire"/> seul).</param>
 /// <param name="ConfirmationRangsAuDessus">Ces joueurs sont pris au plus à ce nombre de rangs au-dessus du nôtre.</param>
 /// <param name="RetourSiBaisse">
-/// Rollback: once a champion's submission is fully ranked, if its score is below the previous
-/// champion's by more than this many points, the previous champion is restored and resubmitted.
-/// 0 disables it.
+/// Rollback: once a champion's submission is fully ranked, if its score is below the best recent
+/// champion's (<paramref name="RetourJours"/>) by more than this many points, that champion is
+/// restored and resubmitted. 0 disables it.
 /// </param>
 /// <param name="ConfirmationAlpha">
 /// A candidate is rejected by the real players only when it does clearly worse than the champion:
 /// a candidate as good would lose that many more of the games they split at most this often (sign test).
 /// </param>
+/// <param name="RetourJours">
+/// The rollback compares with the best of the previous champion and of those promoted in this many
+/// days before it (0: the previous champion only). Older scores are left out: the leaderboard drifts.
+/// </param>
 public sealed record ApiSettings(
     int PartiesConfirmation, string Adversaire, int ConfirmationJoueurs, int ConfirmationRangsAuDessus,
-    bool SoumettreChampions, int ReleveClassementMinutes, double RetourSiBaisse, double ConfirmationAlpha)
+    bool SoumettreChampions, int ReleveClassementMinutes, double RetourSiBaisse, double ConfirmationAlpha,
+    int RetourJours)
 {
     /// <summary>Parties de test que coûte la confirmation d'un candidat, champion compris.</summary>
     public int ConfirmationCost => 2 * PartiesConfirmation * Math.Max(1, ConfirmationJoueurs);
@@ -166,6 +171,7 @@ public sealed record PipelineConfig(
         Check(Api.ConfirmationJoueurs >= 0, "api.confirmation_joueurs", "positif ou nul");
         Check(Api.RetourSiBaisse >= 0, "api.retour_si_baisse", "positif ou nul (0 : jamais de retour)");
         Check(Api.ConfirmationAlpha is > 0 and < 1, "api.confirmation_alpha", "entre 0 et 1 exclus");
+        Check(Api.RetourJours >= 0, "api.retour_jours", "positif ou nul (0 : le champion précédent seul)");
         Check(Laboratoire.Parties >= 0, "laboratoire.parties", "positif ou nul (0 : pas de laboratoire)");
         Check(Laboratoire.RevisionsMax >= 0, "laboratoire.revisions_max", "positif ou nul");
         Check(Laboratoire.SeuilRevision is >= 0 and <= 1, "laboratoire.seuil_revision", "entre 0 et 1");

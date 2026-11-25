@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-23
+> **Status**: in production on the VPS · **Last updated**: 2026-11-25
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -113,15 +113,18 @@ fix a bug in its implementation or keep its version unchanged; at most
 judge decides afterwards. The agent still runs no command: the farm plays the games, as the
 `bot` user.
 
-## 7. The ranking loop (2026-11-17)
+## 7. The ranking loop (2026-11-17, best recent champion since 2026-11-25)
 
 Every `api.releve_classement_minutes` (60), the farm records the rank and score of the current
 submission. When a submission is fully ranked (100 %), its score is stored with the champion
-that produced it. If the current champion's real score is lower than the previous standing
-champion's by more than `api.retour_si_baisse` (1.0 point), it is marked withdrawn, the previous
-champion becomes champion again and is resubmitted. The agents see the real scores and the
-withdrawals in their history. Only the current champion can be withdrawn, never twice against
-the same comparison; 0 disables the rule.
+that produced it. At every full reading, the current champion's real score is compared with the
+best standing champion among the previous one and those promoted in the `api.retour_jours` (3)
+days before it. If it is lower by more than `api.retour_si_baisse` (1.0 point), it is marked
+withdrawn, that best champion becomes champion again and is resubmitted. The agents see the
+real scores and the withdrawals in their history. Only the current champion can be withdrawn,
+and a bot withdrawn once is never restored, so two former champions cannot take turns while the
+whole leaderboard drifts. Scores older than the window are left out for the same reason;
+`retour_jours` 0 compares with the previous champion only, `retour_si_baisse` 0 disables the rule.
 
 ## 8. Loss analysis (2026-11-19)
 
@@ -253,6 +256,12 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   then its reasoning), and the farm moved those trials to Medium. Antigravity's own retry then
   wrote a proper note, but the run still ended in error. An unfinished answer is now asked once
   more of the same model before the next one.
+- **2026-11-25**: a slow slide on the real leaderboard. Champion 225 scored 41.77 (85th); the four
+  champions after it each beat the one before locally (53 to 60 %) but scored 41.00, 41.32, 41.41,
+  then about 40.6 for the fourth. Each was within one point of the previous one, so the rollback
+  never fired. It now compares with the best champion of the last 3 days (`api.retour_jours`),
+  approved by the user, at every full reading. Their real-player confirmations were +4 / -4,
+  +3 / -4, +3 / -4 and +4 / -7: likely candidates that learn to beat our own bot, not the field.
 
 ## 12. Still unverified
 

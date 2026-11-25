@@ -174,8 +174,11 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
                             {
                                 log.LogInformation("Pipeline {Pipeline} : score réel du champion {Champion} : {Score} (rang {Rang})",
                                     name, journal.ChampionHash(), ranking.Score, ranking.Rank);
-                                await RollBackIfWorseAsync(name, p, cfg, journal, ct);
                             }
+
+                            // At every full reading, not only the first: a rule changed since then applies too.
+                            // Once a rollback is done, the restored champion is not scored yet, so nothing repeats.
+                            await RollBackIfWorseAsync(name, p, cfg, journal, ct);
                         }
 
                         await AnalyseBattlesAsync(name, cfg, journal, ct);
@@ -227,13 +230,13 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
     }
 
     /// <summary>
-    /// Restores the previous champion when the current one scores clearly lower on the real
+    /// Restores the best recent champion when the current one scores clearly lower on the real
     /// leaderboard (<see cref="RankingCheck"/>), and resubmits it. The withdrawn champion stays in
     /// the journal, marked, so the agents see it in their history.
     /// </summary>
     private async Task RollBackIfWorseAsync(string name, PipelinePaths p, PipelineConfig cfg, Journal journal, CancellationToken ct)
     {
-        if (RankingCheck.Regression(journal.ScoredChampions(), journal.ChampionHash(), cfg.Api.RetourSiBaisse) is not { } r
+        if (RankingCheck.Regression(journal.ScoredChampions(), journal.ChampionHash(), cfg.Api.RetourSiBaisse, TimeSpan.FromDays(cfg.Api.RetourJours)) is not { } r
             || journal.BotSource(r.Restore.Hash) is not { } source)
         {
             return;
@@ -242,7 +245,7 @@ public sealed class Farm(FarmPaths paths, CodinGameClient api, IAgentRunner agen
         journal.RetireChampion(r.Worse.Id);
         journal.SetChampion(r.Restore.Hash, r.Restore.TrialId);
         await File.WriteAllTextAsync(p.ChampionFile(cfg.Bot.Fichier), source, ct);
-        log.LogWarning("Pipeline {Pipeline} : le champion {Moins} (score {S1}) fait moins bien que {Avant} (score {S2}) : retour au précédent",
+        log.LogWarning("Pipeline {Pipeline} : le champion {Moins} (score {S1}) fait moins bien que {Avant} (score {S2}), le meilleur champion récent : retour à celui-ci",
             name, r.Worse.Hash, r.Worse.Score, r.Restore.Hash, r.Restore.Score);
         if (cfg.Api.SoumettreChampions)
         {

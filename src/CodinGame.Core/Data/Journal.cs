@@ -21,8 +21,8 @@ public sealed record RankingEntry(DateTime At, int Rank, int Total, double Score
 
 public sealed record ChampionEntry(long Id, string Hash, long? TrialId, DateTime Since);
 
-/// <summary>A champion whose submission was fully ranked on CodinGame; <paramref name="Retired"/> after a rollback.</summary>
-public sealed record ScoredChampion(long Id, string Hash, long? TrialId, double Score, int Rank, bool Retired);
+/// <summary>A champion whose submission was fully ranked on CodinGame; <paramref name="Retired"/> after a rollback; promoted at <paramref name="Since"/>.</summary>
+public sealed record ScoredChampion(long Id, string Hash, long? TrialId, double Score, int Rank, bool Retired, DateTime Since);
 
 public sealed record ApiGameEntry(long GameId, string BotHash, string Opponent, string Options, string Outcome, bool Fault);
 
@@ -145,8 +145,8 @@ public sealed class Journal : IDisposable
 
     /// <summary>Champions whose submission was fully ranked, oldest first.</summary>
     public IReadOnlyList<ScoredChampion> ScoredChampions() =>
-        Query("SELECT id, bot_hash, essai_id, score_final, rang_final, retire FROM champions WHERE score_final IS NOT NULL ORDER BY id",
-            r => new ScoredChampion(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetInt64(2), r.GetDouble(3), r.GetInt32(4), r.GetInt64(5) != 0));
+        Query("SELECT id, bot_hash, essai_id, score_final, rang_final, retire, depuis FROM champions WHERE score_final IS NOT NULL ORDER BY id",
+            r => new ScoredChampion(r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetInt64(2), r.GetDouble(3), r.GetInt32(4), r.GetInt64(5) != 0, Date(r.GetString(6))));
 
     public void RetireChampion(long championId) =>
         Exec("UPDATE champions SET retire = 1 WHERE id = $i", ("$i", championId));

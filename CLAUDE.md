@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing pipeline
 
-> **Status**: in production · **Last updated**: 2026-11-22
+> **Status**: in production · **Last updated**: 2026-11-25
 
 An autonomous loop that improves a CodinGame bot (Mad Pod Racing): Antigravity proposes and
 codes, an existing game engine plays candidate against champion, a statistical test decides,
@@ -33,7 +33,8 @@ overview.
    (`api.soumettre_champions`). Only a candidate kept by the SPRT, then without fault and not
    clearly worse than the champion against real players on CodinGame (sign test,
    `api.confirmation_alpha`, approved on 2026-11-22), is submitted; and a former
-   champion restored by the ranking loop (`api.retour_si_baisse`, authorized on 2026-11-17).
+   champion restored by the ranking loop (`api.retour_si_baisse`, authorized on 2026-11-17;
+   the best champion of the last `api.retour_jours` days, approved on 2026-11-25).
    Nothing else submits.
 3. **Never an arcade game**, no change to the CodinGame account.
 4. **Every access to CodinGame goes through `CodinGameClient`**, every AI call through `AgentRunner`.

@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-23
+> **Status**: in production · **Last updated**: 2026-11-25
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -95,9 +95,11 @@ flowchart LR
    champion changed during the trial (a rollback, a rejudge kept meanwhile): beating the former
    one says nothing about the new one, so the candidate is rejected, to be rejudged.
 8. **Real score**: once the submission is fully ranked, its score is stored with the champion.
-   If it is lower than the previous champion's by more than 1 point, the new champion is
-   withdrawn and the previous one is resubmitted. The agents see real scores and withdrawals in
-   their history.
+   If it is lower by more than 1 point than the best of the previous champion and of those
+   promoted in the 3 days before it, the new champion is withdrawn and that best one is
+   resubmitted. Comparing with the best stops a slow slide of champions each a little below the
+   one before. A bot withdrawn once is never restored. The agents see real scores and
+   withdrawals in their history.
 
 ### Loss analysis
 
@@ -184,7 +186,7 @@ default takes the new one (the seed last applied is kept next to the live file,
 | :--- | :--- |
 | `agents` | Tool, model, fallback chain and time limit of each role |
 | `arene` | Engine command, parallelism, time limits, SPRT parameters |
-| `api` | Confirmation (games per opponent, number of real players, rank span, deficit threshold), automatic submission, ranking record interval, rollback threshold |
+| `api` | Confirmation (games per opponent, number of real players, rank span, deficit threshold), automatic submission, ranking record interval, rollback threshold and window |
 | `laboratoire` | Coder's lab: quick games, revision threshold, maximum revisions |
 | `analyse` | Loss analysis: collision threshold, cause thresholds, ranked games read per hour |
 | `boucle` | Trials per day, rejections before a fresh look, retries, pauses, the thinker's word limit |
