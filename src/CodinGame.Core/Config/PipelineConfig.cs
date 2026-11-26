@@ -96,8 +96,14 @@ public sealed record LabSettings(int Parties, int RevisionsMax, double SeuilRevi
 /// </summary>
 public sealed record AnalysisSettings(double SeuilChoc, int EcartChocs, double EcartCadence, int ArriveeSerree, int PartiesClasseesParReleve);
 
-/// <summary>Banc d'adversaires extérieurs : sources de bots publiés par d'autres joueurs (vide = pas de banc).</summary>
-public sealed record BenchSettings(IReadOnlyList<string> Adversaires, int PartiesParAdversaire, string Compilation);
+/// <summary>
+/// Local bench: candidate and champion play the same races against these opponents and are compared
+/// race by race. <paramref name="Adversaires"/>: sources of bots published by other players, built with
+/// <paramref name="Compilation"/>. <paramref name="AnciensChampions"/>: the former champions with the
+/// best real scores join them, taken from the journal (0: none). <paramref name="Alpha"/>: a candidate
+/// is rejected only when it does clearly worse than the champion (sign test). No opponent: no bench.
+/// </summary>
+public sealed record BenchSettings(IReadOnlyList<string> Adversaires, int PartiesParAdversaire, string Compilation, int AnciensChampions, double Alpha);
 
 /// <summary>
 /// Réglages d'une pipeline (<c>pipeline.json</c>). Relus au début de chaque essai :
@@ -192,6 +198,8 @@ public sealed record PipelineConfig(
         Check(Contexte.IdeesRejetees >= 1, "contexte.idees_rejetees", "au moins 1");
         Check(Banc.Compilation.Contains("{source}") && Banc.Compilation.Contains("{sortie}"), "banc.compilation", "doit contenir {source} et {sortie}");
         Check(Banc.PartiesParAdversaire >= 2 && Banc.PartiesParAdversaire % 2 == 0, "banc.parties_par_adversaire", "pair, au moins 2 (chaque circuit est joué des deux places)");
+        Check(Banc.AnciensChampions >= 0, "banc.anciens_champions", "positif ou nul (0 : aucun ancien champion)");
+        Check(Banc.Alpha is > 0 and < 1, "banc.alpha", "entre 0 et 1 exclus");
         return errors;
     }
 }

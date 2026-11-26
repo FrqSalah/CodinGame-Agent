@@ -1,6 +1,6 @@
 # Mad Pod Racing pipeline — design and state
 
-> **Status**: in production on the VPS · **Last updated**: 2026-11-25
+> **Status**: in production on the VPS · **Last updated**: 2026-11-26
 > This document describes what is built. It takes precedence over every other file in `.Agent/`.
 
 ## 1. What the pipeline does
@@ -21,6 +21,9 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
      │                      to the coder, up to 2 times
  LOCAL DUEL              ── candidate vs champion with the robostac engine, until the SPRT verdict;
      │                      a candidate that leads at 600 games gets a second round, lower bar
+     │
+ BENCH                   ── candidate and champion vs the 3 former champions with the best real
+     │                      scores, same games; rejected on a clear deficit (sign test)
      │
  CONFIRMATION            ── CodinGame test games vs 6 real players ranked above us, same maps
      │                      as the champion; rejected on a fault or a clear deficit (sign test)
@@ -55,6 +58,7 @@ real games, real score) decides; the AI proposes.
 | Every new champion is submitted without waiting for the user | User, 2026-11-11 |
 | Confirmation against real players instead of the saturated local bench | User, 2026-11-16 |
 | Coder's lab and rollback on the real leaderboard | User, 2026-11-17 |
+| Rollback to the best champion of the last 3 days; bench of the best former champions | User, 2026-11-25 |
 | Everything pushed to the (public) repository is in English | User, 2026-11-16 |
 
 ## 3. Leagues
@@ -262,6 +266,16 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   never fired. It now compares with the best champion of the last 3 days (`api.retour_jours`),
   approved by the user, at every full reading. Their real-player confirmations were +4 / -4,
   +3 / -4, +3 / -4 and +4 / -7: likely candidates that learn to beat our own bot, not the field.
+  The fourth finished at 41.16 (94th), within the new rule.
+- **2026-11-26**: the bench comes back with our own former champions. Over the nine candidates
+  kept on local duels since trial 162 (52 to 60 %), real players gave 40 games to the candidates
+  against 46 to their champions; the real score rose until champion 225 and then stalled. Candidate
+  and champion now also play 40 games against each of the 3 former champions with the best real
+  scores (`banc.anciens_champions`), chosen from the journal (their code is never published); the
+  candidate is rejected only on a clear deficit (sign test, `banc.alpha`), no longer on one more
+  loss. The champion's first bench also tells which cause it is: if it does not beat those former
+  champions, candidates were going round in circles and the bench is the fix; if it beats them
+  clearly, our bots all play alike, and more games against real players are the next lever.
 
 ## 12. Still unverified
 

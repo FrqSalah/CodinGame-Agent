@@ -56,7 +56,9 @@
   "banc": {
     "adversaires": [],
     "parties_par_adversaire": 40,
-    "compilation": "g++ -std=c++20 -mavx2 -mfma -o {sortie} {source} -lm -lpthread"
+    "compilation": "g++ -std=c++20 -mavx2 -mfma -o {sortie} {source} -lm -lpthread",
+    "anciens_champions": 3,
+    "alpha": 0.05
   },
   "laboratoire": {
     "parties": 40,

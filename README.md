@@ -1,6 +1,6 @@
 # CodinGame Agent — Mad Pod Racing farm
 
-> **Status**: in production · **Last updated**: 2026-11-25
+> **Status**: in production · **Last updated**: 2026-11-26
 
 An autonomous loop that keeps improving a bot for the CodinGame multiplayer game
 [Mad Pod Racing](https://www.codingame.com/multiplayer/bot-programming/mad-pod-racing).
@@ -63,7 +63,8 @@ flowchart LR
     C --> B["Build<br/>g++, up to 2 fixes"]
     B --> L["Lab<br/>quick games, fix bugs"]
     L --> D["Local duel<br/>SPRT vs champion"]
-    D --> R["Confirmation<br/>real players on CodinGame"]
+    D --> N["Bench<br/>best former champions"]
+    N --> R["Confirmation<br/>real players on CodinGame"]
     R --> K["New champion<br/>submitted"]
     K --> S["Real score<br/>rollback if worse"]
 ```
@@ -84,17 +85,23 @@ flowchart LR
    alpha = beta = 0.05), at most 600 games. A duel that reaches this cap while the candidate
    leads gets a second round with a lower bar (H1: 20 Elo, about 53 % of wins), up to 3,000
    games: near the top, gains are small and need many games to be proven.
-6. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
+6. **Bench**: beating the champion is not enough. Candidate and champion play the same 40 games
+   against each of the 3 former champions with the best real scores (`banc.anciens_champions`),
+   and the candidate is rejected when it does clearly worse, game by game (sign test,
+   `banc.alpha`). Without it, a candidate can pass by exploiting the latest champion only: in
+   November, nine candidates kept on local duels did 40 against 46 against real players. The
+   champion's games are kept, so each champion plays them once.
+7. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
    champion each play 4 games against 6 real players ranked up to 60 places above us, on the
    exact same maps. The candidate is rejected on a fault, or when it does clearly worse than the
    champion: on the games only one of them wins, a candidate as good would do that badly at most
    5 % of the time (sign test, `api.confirmation_alpha`). One or two games apart prove nothing
-   on 24 games; the real score has the last word (step 8). Opponents are picked by a fixed rule,
+   on 24 games; the real score has the last word (step 9). Opponents are picked by a fixed rule,
    not by an AI.
-7. **Promotion**: the candidate becomes champion and is submitted to the leaderboard, unless the
+8. **Promotion**: the candidate becomes champion and is submitted to the leaderboard, unless the
    champion changed during the trial (a rollback, a rejudge kept meanwhile): beating the former
    one says nothing about the new one, so the candidate is rejected, to be rejudged.
-8. **Real score**: once the submission is fully ranked, its score is stored with the champion.
+9. **Real score**: once the submission is fully ranked, its score is stored with the champion.
    If it is lower by more than 1 point than the best of the previous champion and of those
    promoted in the 3 days before it, the new champion is withdrawn and that best one is
    resubmitted. Comparing with the best stops a slow slide of champions each a little below the
@@ -161,7 +168,7 @@ farm bilan [pipeline]             journal summary
 farm duel <a> <b> [n]             local duel between two bot sources
 farm rejuger <trial>              re-judge the candidate of a past trial (same champion: from its duel games)
 farm juger <source> <idea> [note] judge a bot written outside the farm, same steps and thresholds
-farm banc                         measure the champion against the local bench of outside bots
+farm banc                         measure the champion against the local bench (former champions, outside bots)
 farm page <file.html>             write the status page to a file
 ```
 
@@ -191,7 +198,7 @@ default takes the new one (the seed last applied is kept next to the live file,
 | `analyse` | Loss analysis: collision threshold, cause thresholds, ranked games read per hour |
 | `boucle` | Trials per day, rejections before a fresh look, retries, pauses, the thinker's word limit |
 | `contexte` | How much history the agents see |
-| `banc` | Optional local bench of outside bots (empty by default: it no longer separated our versions) |
+| `banc` | Local bench: number of former champions, games per opponent, rejection threshold, optional outside bots (none by default: they no longer separated our versions) |
 
 ## Data
 

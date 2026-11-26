@@ -7,10 +7,10 @@ namespace CodinGame.Core.Arena;
 public sealed record BenchCase(string Opponent, long Seed, int Seat);
 
 /// <summary>
-/// Le banc d'adversaires extérieurs : des bots publiés par d'autres joueurs, de niveau connu.
-/// Chaque bot mesuré y joue les mêmes situations, ce qui permet de comparer candidat et
-/// champion situation par situation. Sans ce banc, le juge ne compare un candidat qu'au
-/// champion, et le bot finit par ne progresser que contre ses propres versions.
+/// The local bench: bots published by other players and our former champions with the best real
+/// scores. Every bot measured plays the same situations, so candidate and champion are compared
+/// situation by situation. Without it, the judge compares a candidate only with the champion, and
+/// the bot ends up progressing only against its own latest version.
 /// </summary>
 public sealed class Bench(RefereeGame game, ArenaSettings arena, ILogger log)
 {

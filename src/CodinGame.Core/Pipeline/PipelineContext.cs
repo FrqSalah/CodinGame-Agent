@@ -16,8 +16,12 @@ public sealed class PipelineContext(string name, PipelinePaths paths, PipelineCo
 
     public BotBuilder Builder { get; } = new(paths.BotCache, config.Bot.Compilation, config.Bot.Fichier);
 
-    /// <summary>Compile les adversaires extérieurs du banc ; renvoie leur nom (fichier sans extension) et leur exécutable.</summary>
-    public async Task<Dictionary<string, string>> BuildBenchOpponentsAsync(CancellationToken ct)
+    /// <summary>
+    /// Builds the bench opponents and returns their name and executable: the outside bots of
+    /// <c>banc.adversaires</c> (named after their file), then the former champions with the best real
+    /// scores (<c>banc.anciens_champions</c>, named after their trial), never <paramref name="champion"/>.
+    /// </summary>
+    public async Task<Dictionary<string, string>> BuildBenchOpponentsAsync(string? champion, CancellationToken ct)
     {
         var exes = new Dictionary<string, string>();
         var builder = new BotBuilder(Paths.BotCache, Config.Banc.Compilation, "Bot.cpp");
@@ -32,8 +36,39 @@ public sealed class PipelineContext(string name, PipelinePaths paths, PipelineCo
             exes[Path.GetFileNameWithoutExtension(path)] = build.Executable!;
         }
 
+        foreach (var former in FormerChampions(Journal.ScoredChampions(), champion, Config.Banc.AnciensChampions))
+        {
+            // Built like the champion itself; one that no longer builds only leaves the bench smaller.
+            if (Journal.BotSource(former.Hash) is { } source && await Builder.BuildAsync(source, ct) is { Success: true } build)
+            {
+                exes[FormerChampionName(former)] = build.Executable!;
+            }
+        }
+
         return exes;
     }
+
+    /// <summary>
+    /// The former champions that join the bench: the <paramref name="count"/> best real scores among
+    /// bots never withdrawn, each bot once with its latest score, never <paramref name="current"/>.
+    /// Beating only the latest champion is not enough: candidates that just exploit it would pass
+    /// (2026-11-25: nine candidates kept on local duels, 40 against 46 against real players).
+    /// </summary>
+    public static IReadOnlyList<ScoredChampion> FormerChampions(IReadOnlyList<ScoredChampion> scored, string? current, int count)
+    {
+        var withdrawn = scored.Where(c => c.Retired).Select(c => c.Hash).ToHashSet();
+        return scored
+            .Where(c => c.Hash != current && !withdrawn.Contains(c.Hash))
+            .GroupBy(c => c.Hash)
+            .Select(g => g.Last())
+            .OrderByDescending(c => c.Score)
+            .Take(count)
+            .ToList();
+    }
+
+    /// <summary>A former champion's name on the bench and in the journal: its trial, or its hash for the earliest ones.</summary>
+    public static string FormerChampionName(ScoredChampion c) =>
+        $"champion-{(c.TrialId is { } t ? t.ToString(CultureInfo.InvariantCulture) : c.Hash[..Math.Min(8, c.Hash.Length)])}";
 
     /// <summary>Joue le banc pour un bot (les situations déjà au journal ne sont pas rejouées) et renvoie ses résultats.</summary>
     public async Task<Dictionary<BenchCase, string>> PlayBenchAsync(

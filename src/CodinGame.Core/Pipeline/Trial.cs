@@ -402,24 +402,31 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
             return (changed, duel);
         }
 
-        // 5. Banc d'adversaires extérieurs : battre le champion ne suffit pas, il ne faut pas faire
-        //    moins bien que lui contre des bots d'autres joueurs, situation par situation.
-        if (cfg.Banc.Adversaires.Count > 0)
+        // 5. Bench: beating the champion is not enough. Race by race, the candidate must not do clearly
+        //    worse than the champion against other bots: outside ones and the former champions with the
+        //    best real scores (banc.anciens_champions), so that an idea that only exploits the latest
+        //    champion does not pass.
+        var benchExes = cfg.Banc.Adversaires.Count > 0 || cfg.Banc.AnciensChampions > 0
+            ? await ctx.BuildBenchOpponentsAsync(championHash, ct)
+            : new Dictionary<string, string>();
+        if (benchExes.Count > 0)
         {
             using (Telemetry.Source.StartActivity("banc"))
             {
-                var (bench, fault) = await RunBenchAsync(hash, candidateExe, championHash, championBuild.Executable!, ct);
+                var (bench, fault) = await RunBenchAsync(hash, candidateExe, championHash, championBuild.Executable!, benchExes, ct);
                 if (fault is not null)
                 {
                     return (new TrialVerdict(Verdicts.Fault, $"banc : {fault}"), duel);
                 }
 
                 var n = bench.Cases;
-                var line = $"banc extérieur : candidat {bench.CandidateWins}/{n}, champion {bench.ChampionWins}/{n} (+{bench.Plus} / -{bench.Minus})";
+                var line = $"banc ({string.Join(", ", benchExes.Keys)}) : candidat {bench.CandidateWins}/{n}, champion {bench.ChampionWins}/{n} (+{bench.Plus} / -{bench.Minus})";
                 log.LogInformation("Essai {Essai} : {Banc}", id, line);
-                if (bench.Minus > bench.Plus)
+                if (Confirmation.ClearlyWorse(bench.Plus, bench.Minus, cfg.Banc.Alpha))
                 {
-                    return (new TrialVerdict(Verdicts.Rejected, $"meilleur que le champion mais moins bon que lui contre les adversaires extérieurs : {score} ; {line}"), duel);
+                    var chance = Confirmation.SignTest(bench.Plus, bench.Minus).ToString("P0", CultureInfo.InvariantCulture);
+                    return (new TrialVerdict(Verdicts.Rejected,
+                        $"meilleur que le champion mais nettement moins bon que lui contre le banc (hasard : {chance}) : {score} ; {line}"), duel);
                 }
 
                 score += $" ; {line}";
@@ -506,9 +513,8 @@ public sealed class Trial(PipelineContext ctx, CodinGameClient api, IAgentRunner
 
     /// <summary>Fait jouer le banc au champion (résultats gardés au journal) puis au candidat, et les compare.</summary>
     private async Task<(BenchOutcome Outcome, string? CandidateFault)> RunBenchAsync(
-        string hash, string candidateExe, string championHash, string championExe, CancellationToken ct)
+        string hash, string candidateExe, string championHash, string championExe, IReadOnlyDictionary<string, string> exes, CancellationToken ct)
     {
-        var exes = await ctx.BuildBenchOpponentsAsync(ct);
         var champion = await ctx.PlayBenchAsync(championHash, championExe, exes, null, log, ct);
         var cases = champion.Keys.ToList();
         Telemetry.SetBenchWinRate((double)cases.Count(c => champion[c] == Results.Win) / cases.Count);

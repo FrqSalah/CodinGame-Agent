@@ -278,15 +278,15 @@ async Task<int> BenchChampion()
     var (ctx, journal) = farm.Open(paths.PipelineNames().First());
     using (journal)
     {
-        if (ctx.Config.Banc.Adversaires.Count == 0)
+        var hash = journal.ChampionHash() ?? throw new ConfigException("aucun champion");
+        var opponents = await ctx.BuildBenchOpponentsAsync(hash, ct);
+        if (opponents.Count == 0)
         {
-            log.LogError("Aucun adversaire dans banc.adversaires");
+            log.LogError("Aucun adversaire : banc.adversaires est vide et aucun ancien champion n'est classé (banc.anciens_champions)");
             return 1;
         }
 
-        var hash = journal.ChampionHash() ?? throw new ConfigException("aucun champion");
         var build = await ctx.Builder.BuildAsync(journal.BotSource(hash)!, ct);
-        var opponents = await ctx.BuildBenchOpponentsAsync(ct);
         var results = await ctx.PlayBenchAsync(hash, build.Executable!, opponents, null, log, ct);
         Console.WriteLine($"Champion {hash} contre le banc :");
         foreach (var group in results.GroupBy(r => r.Key.Opponent))
