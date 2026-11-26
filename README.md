@@ -92,12 +92,14 @@ flowchart LR
    November, nine candidates kept on local duels did 40 against 46 against real players. The
    champion's games are kept, so each champion plays them once.
 7. **Confirmation on CodinGame**: the real engine, compiler and time limits. Candidate and
-   champion each play 4 games against 6 real players ranked up to 60 places above us, on the
+   champion each play 8 games against 8 real players ranked up to 60 places above us, on the
    exact same maps. The candidate is rejected on a fault, or when it does clearly worse than the
    champion: on the games only one of them wins, a candidate as good would do that badly at most
    5 % of the time (sign test, `api.confirmation_alpha`). One or two games apart prove nothing
-   on 24 games; the real score has the last word (step 9). Opponents are picked by a fixed rule,
-   not by an AI.
+   on 64 games; the real score has the last word (step 9). Opponents are picked by a fixed rule,
+   not by an AI. Real players are the only opponents that do not play like our own bots, so the
+   farm spends on them up to 128 of the 600 test games CodinGame allows a day (24 before
+   2026-11-26), waiting when a shorter window is used up.
 8. **Promotion**: the candidate becomes champion and is submitted to the leaderboard, unless the
    champion changed during the trial (a rollback, a rejudge kept meanwhile): beating the former
    one says nothing about the new one, so the candidate is rejected, to be rejudged.

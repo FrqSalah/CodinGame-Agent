@@ -25,7 +25,7 @@ An autonomous loop that improves a CodinGame bot, for a single game: Mad Pod Rac
  BENCH                   ── candidate and champion vs the 3 former champions with the best real
      │                      scores, same games; rejected on a clear deficit (sign test)
      │
- CONFIRMATION            ── CodinGame test games vs 6 real players ranked above us, same maps
+ CONFIRMATION            ── CodinGame test games vs 8 real players ranked above us, same maps
      │                      as the champion; rejected on a fault or a clear deficit (sign test)
  VERDICT                 ── GARDE (new champion, submitted) or JETE / FAUTE / NON_COMPILE / ECHEC_AGENT / NOTE_REFUSEE
      │
@@ -276,6 +276,10 @@ ssh <vps> 'cd /opt/codingame-farm/repo && docker compose -f deploy/docker-compos
   loss. The champion's first bench also tells which cause it is: if it does not beat those former
   champions, candidates were going round in circles and the bench is the fix; if it beats them
   clearly, our bots all play alike, and more games against real players are the next lever.
+  The same day, approved by the user: the real-player confirmation goes from 4 games against 6
+  players to 8 against 8 (64 games per bot instead of 24). The farm used about 150 of the 600
+  test games CodinGame allows a day; a confirmation now costs up to 128 and takes over an hour,
+  paced by the 15-minute and 1-hour windows (30 and 80 games).
 
 ## 12. Still unverified
 

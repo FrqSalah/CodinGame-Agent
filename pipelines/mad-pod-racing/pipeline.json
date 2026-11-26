@@ -29,9 +29,9 @@
     "elo1_prolongation": 20
   },
   "api": {
-    "parties_confirmation": 4,
+    "parties_confirmation": 8,
     "adversaire": "default",
-    "confirmation_joueurs": 6,
+    "confirmation_joueurs": 8,
     "confirmation_rangs_au_dessus": 60,
     "soumettre_champions": true,
     "releve_classement_minutes": 60,
